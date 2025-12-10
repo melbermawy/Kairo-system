@@ -1,0 +1,32 @@
+[project]
+name = "kairo"
+version = "0.1.0"
+description = "AI-native content copilot for brands and content teams"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "django>=5.0,<6.0",
+    "dj-database-url>=2.1.0",
+    "psycopg2-binary>=2.9.9",
+    "python-dotenv>=1.0.0",
+    "django-cors-headers>=4.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-django>=4.8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "kairo.settings"
+python_files = ["test_*.py", "*_test.py"]
+testpaths = ["tests"]
+addopts = "-v"
+
+[tool.hatch.build.targets.wheel]
+packages = ["kairo"]

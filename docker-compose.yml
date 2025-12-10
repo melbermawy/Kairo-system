@@ -1,0 +1,66 @@
+# Kairo Backend - Docker Compose
+# PR-0: repo + env spine
+#
+# Usage:
+#   docker-compose up        # Start all services
+#   docker-compose up -d     # Start in detached mode
+#   docker-compose down      # Stop all services
+#   docker-compose logs web  # View django logs
+
+services:
+  # PostgreSQL database
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kairo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kairo}
+      POSTGRES_DB: ${POSTGRES_DB:-kairo}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kairo} -d ${POSTGRES_DB:-kairo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Django web application
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-dev-docker-secret-change-in-prod}
+      - DJANGO_DEBUG=${DJANGO_DEBUG:-True}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-kairo}:${POSTGRES_PASSWORD:-kairo}@db:5432/${POSTGRES_DB:-kairo}
+      - ALLOWED_HOSTS=localhost,127.0.0.1,web
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+
+volumes:
+  postgres_data:
+
+# PRD-1: out of scope for PR-0 - future services:
+#
+# redis:
+#   image: redis:7-alpine
+#   ports:
+#     - "6379:6379"
+#
+# worker:
+#   build: .
+#   command: celery -A kairo worker -l info
+#   depends_on:
+#     - db
+#     - redis
