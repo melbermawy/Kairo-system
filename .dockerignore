@@ -1,0 +1,52 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv
+venv
+ENV
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Local config
+.env
+*.local
+
+# Docker
+docker-compose.override.yml
+
+# Database (for sqlite dev)
+db.sqlite3
+
+# Static files
+staticfiles/
+
+# Docs (not needed in container)
+docs/
+*.md
+!README.md
+
+# Eval outputs
+eval/hero_loop/out/
