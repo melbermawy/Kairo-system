@@ -1,0 +1,576 @@
+# PR Roadmap 1 + Standards
+
+> master roadmap for PRD-1 implementation PRs and quality standards
+
+---
+
+## PR-0: Repo + Env Spine (Already Mostly Done)
+
+**Goal:** Make sure Claude always works inside a sane skeleton.
+
+### Includes
+
+- Django project + app structure (core, hero, agents, etc.)
+- Supabase / Postgres config wired to Django
+- Testing harness (pytest), basic CI stub
+- docs/ wiring (so PRD + technical docs live in repo)
+
+### Acceptance
+
+- `docker-compose up` (or equivalent) brings up:
+  - Django
+  - DB
+- pytest runs a trivial healthcheck test
+- No business logic yet
+
+---
+
+## PR-1: Canonical Schema + Migrations (Hard Constraints)
+
+**Goal:** Fully realize §3.1 + 3.4 (tables/enums) **with constraints** and nothing else.
+
+### Includes
+
+- Django models for:
+  - Brand, BrandSnapshot, Persona, ContentPillar, PatternTemplate
+  - Opportunity, ContentPackage, Variant
+  - ExecutionEvent, LearningEvent
+- Enums:
+  - channel, status enums, source_type, scope_type, signal_type, decision_type
+  - Defined once and reused everywhere
+- Migrations:
+  - Create all tables with:
+    - FKs + on delete behavior
+    - Unique constraints where implied:
+      - e.g. `(brand_id, name)` for ContentPillar (if that's the rule)
+      - `(brand_id, name)` for Persona (if we want it)
+      - `(brand_id, opportunity_id)` if we enforce "one package per opp" in PRD-1
+    - Indices on hot paths:
+      - `(brand_id, created_at)` for opportunities, packages, variants
+      - `(brand_id, created_at)` for execution/learning events
+
+### Explicit Rules
+
+- **No** engines, services, or API views here
+- **No** deepagents, no LLM calls
+- Mark "in-memory only" DTOs (e.g. LearningSummary) as **not persisted** in comments/docstrings (to avoid rogue tables later)
+- All persisted models must have `created_at` and `updated_at` fields:
+  - Timezone-aware UTC
+  - `created_at` set once on insert
+  - `updated_at` auto-updated on each write
+  - Any "as_of" semantics live in separate, explicitly named fields (e.g. `as_of_date`), not in `created_at`
+
+### Tests / Acceptance
+
+- Migration test: fresh DB → run migrations → all tables exist
+- Constraint tests:
+  - Cannot create orphaned ContentPackage (without valid Opportunity)
+  - Cannot create second package for same opportunity **if** we lock that rule now
+  - FK cascades behave as expected (or are forbidden) for deletes
+- Enums:
+  - Only allowed values can be saved
+  - Invalid values throw
+
+---
+
+## PR-2: DTOs + Validation Layer + API Contracts (Lock the Shapes)
+
+**Goal:** Define **all request/response/graph DTOs** and lock the HTTP/API contract for the hero loop, without wiring real logic.
+
+### Includes
+
+- DTOs use Pydantic v2 BaseModel exclusively for:
+  - BrandSnapshot
+  - OpportunityDTO, OpportunityDraft
+  - ContentPackageDTO
+  - VariantDTO, VariantDraft
+  - ExecutionEventDTO, LearningEventDTO
+  - ExternalSignalBundle + nested signal types
+  - TodayBoardDTO (section 3.3.6)
+- HTTP contract:
+  - `GET /brands/{brand_id}/today`
+  - `POST /brands/{brand_id}/today/regenerate`
+  - `POST /brands/{brand_id}/opportunities/{opportunity_id}/packages`
+  - `GET /packages/{package_id}`
+  - `POST /packages/{package_id}/variants/generate`
+  - `GET /packages/{package_id}/variants`
+  - `PATCH /variants/{variant_id}`
+  - Decision endpoints x3
+- OpenAPI (or contracts/api.md) generated from those DTOs
+
+### Explicit Rules
+
+- **From this PR on**, HTTP shapes (paths + JSON shapes) are treated as **contracts**:
+  - Later PRs may add **optional** fields
+  - Later PRs may **not** rename/remove fields without conscious migration + UI coordination
+- No business logic; handlers can return stubbed responses or NotImplemented
+
+### Tests / Acceptance
+
+- "Round-trip" tests:
+  - Sample DTO → serialize → deserialize → same object
+- HTTP contract tests:
+  - Hitting each endpoint returns a response that validates against the DTO schema
+- Freeze:
+  - We add a small test that asserts OpenAPI hash doesn't change without explicit update (cheap way to catch accidental shape drift)
+
+---
+
+## PR-3: Service Layer + Engines Layer Skeleton (No LLM, Stubbed Behavior)
+
+**Goal:** Separate **services** (HTTP + persistence + transactions) from **engines** (business logic) before any agent code lands.
+
+### Includes
+
+- Django "services" modules:
+  - brands_service, today_service, opportunities_service
+  - content_packages_service, variants_service
+  - decisions_service, learning_service
+- Engine modules:
+  - opportunities_engine:
+    - `generate_today_board(brand_id: UUID) -> TodayBoardDTO`
+  - content_engine:
+    - `create_package_from_opportunity(brand_id, opportunity_id) -> ContentPackage`
+    - `generate_variants_for_package(package_id) -> list[Variant]`
+  - learning_engine:
+    - `summarize_learning_for_brand(brand_id) -> LearningSummary`
+    - `process_execution_events(brand_id, events_window) -> list[LearningEvent]`
+- Stub implementations:
+  - Engines return **deterministic fake data**:
+    - e.g. opportunities engine returns 6 hardcoded opportunities using schema
+    - content engine creates minimal package and 1 fake variant per channel
+- HTTP endpoints now:
+  - Call services → services call engines
+  - But engines still stubbed
+
+### Explicit Rules
+
+- **All** state-changing actions (pin/snooze/publish/edit) go through decisions_service in a **single transaction**:
+  - Mutate primary object
+  - Append ExecutionEvent
+- Services **never** call deepagents or LLMs directly; they only talk to engines
+- Engines **own** deterministic business logic; no DB writes from graphs later
+
+### Tests / Acceptance
+
+- Service tests:
+  - Hitting endpoints triggers service methods, not ORM calls directly
+  - Decisions always create both object changes + ExecutionEvent in one transaction
+- Engine stub tests:
+  - `generate_today_board` returns valid TodayBoardDTO with 6–12 opportunities and sane fields
+  - Creating package from opportunity is idempotent:
+    - Same `(brand, opportunity)` → same package id
+
+---
+
+## PR-4: Decisions + Learning Pipeline (Deterministic, No LLM)
+
+**Goal:** Make the **ExecutionEvent → LearningEvent** path real and deterministic.
+
+### Includes
+
+- Full implementation of:
+  - decisions_service:
+    - `record_opportunity_decision`
+    - `record_package_decision`
+    - `record_variant_decision`
+  - learning_engine.process_execution_events:
+    - Rule-based bucketing + weight deltas per §5.4
+- Simple job runner:
+  - Management command or cron-like script that:
+    - Fetches events since last run
+    - Calls learning_engine
+    - Writes LearningEvents
+
+### Explicit Rules
+
+- No LLM anywhere here
+- Learning engine **never** mutates primary tables; only writes LearningEvents
+- Primary object mutation + ExecutionEvent must be atomic
+
+### Tests / Acceptance
+
+- Transactional tests:
+  - Forced DB error during decision → neither object mutation nor execution_event is written
+- Learning tests:
+  - Deterministic mapping from a synthetic batch of ExecutionEvents to LearningEvents
+  - Bounded weight_delta per scope per run
+
+---
+
+## PR-5: External Signals Bundler (Stubbed, No HTTP)
+
+**Goal:** Build the **ExternalSignalBundle** abstraction with fixed shapes, but using fixtures only.
+
+### Includes
+
+- `external_signals_service.get_bundle_for_brand(brand_id) -> ExternalSignalBundle`
+  - Reads JSON/YAML fixtures or seed tables
+- `get_external_signals_tool` wrapper (no real deepagents yet, just the function signature)
+- Fixture structure:
+  - trends, web_mentions, competitor_posts, social_moments as per §6.2
+  - Realistic-looking text and numbers for a couple of reference brands
+
+### Explicit Rules
+
+- Absolutely **no real HTTP** calls in this PR:
+  - No requests to Google, no scraping, no search
+- Graphs must be able to work with:
+  - Rich bundles
+  - Empty bundles
+  - Failures (simulate `get_bundle_for_brand` throwing) → returns empty bundle
+
+### Tests / Acceptance
+
+- Shape test:
+  - Bundle always validates against ExternalSignalBundle DTO
+- Behavior:
+  - Missing fixture → returns empty bundle and logs
+  - "Rich" fixtures behave as expected (correct recency_days, hint IDs, etc.)
+
+---
+
+## PR-6: Minimal Observability + Run IDs (Before Any LLM)
+
+**Goal:** Wire **run_id + basic logging** into the engines layer before we involve agents.
+
+### Includes
+
+- RunContext concept in engines:
+  - run_id, brand_id, flow (F1/F2/F3), trigger_source
+- Logging utility:
+  - Structured logs for:
+    - start/end of `generate_today_board`, `create_package_from_opportunity`, `generate_variants_for_package`, `process_execution_events`
+    - status: success | partial | failure
+- Propagate run_id to:
+  - Future graph calls (in later PRs)
+  - DB records where relevant (optional last_run_id fields, or just logs for now)
+
+### Explicit Rules
+
+- Every engine entry point must accept / create a run_id
+- No actual metrics system yet, but logs **must** have enough info to debug a run:
+  - brand_id, run_id, flow, status, error summary
+
+### Tests / Acceptance
+
+- Unit tests:
+  - Calling engines attaches run_id and logs at least one structured entry
+- Manual:
+  - Run a fake `regenerate_today_board` and confirm logs can reconstruct "what happened"
+
+---
+
+## PR-7: LLM Client + Model Policy (No Graphs Yet)
+
+**Goal:** Introduce a **single LLM client** with model/cost policy, timeouts, structured output parsing.
+
+### Includes
+
+- llm_client module:
+  - Configuration for M1, M2
+  - Standard call interface: `llm_client.call(prompt, tools?, model_role?)`
+  - Timeouts, retries, max tokens
+  - Token + cost estimation hooks
+- Structured output utilities:
+  - `parse_structured_output(raw_text, target_dto)` with strict failure modes
+- Minimal metrics logging for LLM calls:
+  - run_id, graph_name (placeholder), model, tokens, latency_ms, status
+
+### Explicit Rules
+
+- **No graph may call provider SDK directly**; all LLM usage must go through llm_client
+- **No** graph code yet; we just build the client & tests
+
+### Tests / Acceptance
+
+- Mock LLM provider in tests; verify:
+  - Timeouts
+  - Retries
+  - Structured output parsing errors are handled as expected
+- Confirm that cost/usage logs are recorded for each simulated call
+
+---
+
+## PR-8: Opportunities Graph Wired via Opportunities Engine (F1)
+
+**Goal:** Implement `graph_hero_generate_opportunities` and wire it behind `opportunities_engine.generate_today_board`.
+
+### Includes
+
+- Deepagents graph:
+  - Nodes N1–N6 as per §5.1
+  - Uses:
+    - `get_brand_context_tool`
+    - `get_learning_summary_tool`
+    - `get_external_signals_tool`
+    - Deterministic normalizer
+- `get_brand_context_tool`:
+  - Thin wrapper over brands_service + content_pillars + personas
+- Integration:
+  - `opportunities_engine.generate_today_board`:
+    - Calls graph with run_id, BrandSnapshot, LearningSummary, ExternalSignalBundle
+    - Receives `OpportunityDraft[]`
+    - Applies deterministic ranking + pruning
+    - Persists Opportunity rows
+    - Returns TodayBoardDTO
+
+### Explicit Rules
+
+- Engines still own **all DB writes**
+- Graph:
+  - Returns **only DTOs**; no ORM, no DB connections
+- Failure behavior:
+  - If graph fails → engine logs + returns:
+    - Old Today board if available, marked as degraded
+    - Or empty board with explicit "no opportunities" state
+
+### Tests / Acceptance
+
+- Deterministic tests with **mocked LLM**:
+  - Graph returning structured test data → engine produces correct Opportunity rows and TodayBoardDTO
+- Invariants tests:
+  - 6–24 candidates per run
+  - Scores in [0,100]
+  - primary_channel ∈ {linkedin, x}
+- Degraded modes tests:
+  - External signals failure
+  - Graph failure
+  - Empty bundle
+
+> If Claude struggles here, you can split into:
+> - PR-8a: monolithic single-node graph + engine ranking
+> - PR-8b: refactor to full multi-node graph
+
+---
+
+## PR-9: Package + Variants Graphs Wired via Content Engine (F2)
+
+**Goal:** Implement `graph_hero_package_from_opportunity` and `graph_hero_variants_from_package` and wire them behind content_engine.
+
+### Includes
+
+- Graphs as per §5.2 and §5.3:
+  - Thesis + channel selection
+  - Pattern suggestions
+  - Variants generation per channel
+- Tools:
+  - `get_brand_voice_tool`
+  - `get_available_patterns_tool`
+  - `get_channel_guidelines_tool`
+  - `pattern_resolver`
+- Integration:
+  - `content_engine.create_package_from_opportunity`:
+    - Calls package graph
+    - Persists ContentPackage
+  - `content_engine.generate_variants_for_package`:
+    - Calls variants graph
+    - Persists Variant rows
+    - Respects **no regeneration** rule in PRD-1:
+      - If variants already exist, return error / no-op
+
+### Explicit Rules
+
+- **Idempotency**:
+  - `create_package_from_opportunity(brand, opportunity)` is idempotent
+  - `generate_variants_for_package` rejects if variants already exist (in PRD-1)
+- Taboo enforcement:
+  - Check BrandSnapshot.taboos on all generated text and reject / flag violations before persistence
+
+### Tests / Acceptance
+
+- Deterministic tests with mocked LLM outputs:
+  - Ensure DTO parsing + persistence behave correctly
+- Invariants:
+  - At least 1 variant per channel on success
+  - Max MAX_VARIANTS_PER_CHANNEL
+  - Valid pattern IDs or null (never invalid)
+- Failure tests:
+  - Per-channel errors
+  - Full graph failures
+  - Taboo violations → no "ready/published" with bad text
+
+> Again, can be split into two PRs if Claude can't handle both graphs + integration at once.
+
+---
+
+## PR-10: Offline Eval Harness + Fixtures (Quality Gates)
+
+**Goal:** Build the **offline eval harness** and seed eval fixtures so we can measure quality and regressions.
+
+### Includes
+
+- Reference brands + fixtures:
+  - 5+ BrandSnapshots
+  - Multiple ExternalSignalBundles per brand
+  - "Golden" opportunities, packages, variants
+- Harness:
+  - Script / notebook that:
+    - Runs F1 and F2 across eval brands
+    - Saves outputs to JSON + MD reports
+  - Basic metrics:
+    - Coverage vs golden
+    - Opportunity clarity (manual labels)
+    - Package quality (manual labels)
+    - Variant acceptance / edit distance
+
+### Explicit Rules
+
+- Harness is **manual/dev-run** in PRD-1, not CI-blocking yet
+- Results + metrics stored under docs/eval/ or similar
+- CI uses a mocked-LLM mode of the eval harness (same codepath, fake client). Real-LLM eval runs are explicitly dev-only and are not part of the CI gate.
+
+### Tests / Acceptance
+
+- Harness runs end-to-end on CI with mocks (no real LLM); in real env it can be dev-only
+- Basic sanity:
+  - No structural errors
+  - No taboo violations in eval output
+
+---
+
+## PR-11: Observability, Classification, and Admin Surfaces
+
+**Goal:** Add the **"good/partial/bad"** classification + minimal admin UI.
+
+### Includes
+
+- Classification:
+  - Classify each run (F1/F2) as good | partial | bad per §7.3 rules
+  - Store classification + reason alongside logs
+- Metrics:
+  - Basic counters: success/partial/fail per graph per brand
+  - Latency distributions per graph
+- Admin/debug UI:
+  - Brand detail pages with:
+    - Latest snapshot
+    - Opportunities list
+    - Packages + variants list
+  - Run debugging:
+    - List today runs with run_id, timestamp, status
+    - View DTOs for a run
+- These admin/debug surfaces live inside the Django app only (Django admin or simple internal templates). They are not part of the Next.js customer-facing UI.
+
+### Explicit Rules
+
+- **No** business logic in admin; read-only views only
+- Classification rules must be:
+  - Deterministic
+  - Covered by tests
+
+### Tests / Acceptance
+
+- Classification tests for edge cases:
+  - Small boards → partial vs bad
+  - Partial variants → partial
+  - Complete failure → bad
+- Admin views render for seed brands without errors
+
+---
+
+## Quick Sanity Check
+
+- Hero loop end-to-end is already "functional" by ~PR-8/9
+- PR-1–7 give Claude:
+  - Hard schema
+  - Clear DTOs
+  - Explicit engines layer
+  - A single LLM client
+  - run_ids + basic logs
+- Later PRs are mostly:
+  - Graphs
+  - Quality harness
+  - Observability
+
+---
+
+## Per-PR Standards (Backend)
+
+Every PR must:
+
+### 1. Trace Back to PRD-1
+
+- PR description: "Implements PRD-1 §X.Y: …"
+
+### 2. Respect Contracts
+
+- No shape changes to objects in PRD without updating schemas + tests
+
+### 3. Be Fully Test-Backed
+
+If you add/modify:
+
+- A **service function** → add/extend **unit tests** for that service
+- A **DTO/schema** → add **validation tests** including adversarial payloads
+- A **graph entrypoint** → add at least **one happy-path + one failure-path test** using a fake LLM
+
+### 4. No Real External Calls
+
+- LLM client mocked
+- External signals use fixtures only (per PRD)
+
+### 5. LLM-off Mode Support
+
+The system must support a `LLM_DISABLED=True` configuration where:
+
+- All LLM calls go through `llm_client`
+- `llm_client` can be swapped for a fake client that returns deterministic stub outputs
+- Graphs must behave sensibly in this mode (graceful degradation, not crashes)
+
+This is required for tests and some eval runs.
+
+### 6. Basic Hygiene
+
+- Type hints on all public functions
+- No TODOs / commented-out experiments
+- Migrations are deterministic and idempotent on a fresh DB
+
+---
+
+## Testing Levels
+
+### A) Unit Tests (Mandatory from PR-1 Onward)
+
+For each PR:
+
+- Services (today_service, content_packages_service, etc.)
+- DTOs and schema validation for:
+  - BrandSnapshot, OpportunityDraft, Opportunity, ContentPackage, Variant, ExecutionEvent, LearningEvent, ExternalSignalBundle, TodayBoardDTO
+
+### B) Graph Tests (When Graphs Appear)
+
+- Deepagents graphs tested with:
+  - **Fake LLM client** that returns canned responses
+  - No network, no real tokens
+- Tests assert:
+  - Correct number of calls
+  - Invariants from PRD (score ranges, channel enums, non-empty thesis, etc.)
+
+### C) Integration "Hero Loop" Tests (Start Around PR-5/PR-6)
+
+- Spin up test DB with fixtures:
+  - One brand, snapshot, pillars/personas, patterns, external signals
+- Run:
+  - `regenerate_today_board`
+  - Create package from top opportunity
+  - Generate variants
+- Assert:
+  - Objects persisted with the right relationships
+  - TodayBoardDTO sane (counts, summary)
+  - No validation errors thrown
+
+This can be a single `test_hero_loop_smoke.py` that we keep evolving.
+
+---
+
+## CI / Gating
+
+- **PR must not merge** unless:
+  - Tests for that module exist and are green
+  - Hero-loop smoke test stays green once we add it
+- Any PR that changes schemas or graph contracts **must** update tests *in the same PR*
+
+If we hold that line from PR-1, you can skim code and rely on:
+
+- PRD as truth
+- Tests as enforcement
