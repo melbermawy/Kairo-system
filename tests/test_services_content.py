@@ -58,6 +58,13 @@ def sample_variant_id():
     return uuid4()
 
 
+@pytest.fixture
+def sample_brand_id():
+    """A sample brand ID for testing (matches stub ID used in API views)."""
+    from uuid import UUID
+    return UUID("12345678-1234-5678-1234-567812345678")
+
+
 # =============================================================================
 # CONTENT PACKAGES SERVICE TESTS
 # =============================================================================
@@ -109,62 +116,62 @@ class TestContentPackagesService:
 class TestVariantsServiceGenerate:
     """Tests for variants_service.generate_variants_for_package."""
 
-    def test_returns_generate_variants_response_dto(self, sample_package_id):
+    def test_returns_generate_variants_response_dto(self, sample_brand_id, sample_package_id):
         """Service returns GenerateVariantsResponseDTO."""
-        result = variants_service.generate_variants_for_package(sample_package_id)
+        result = variants_service.generate_variants_for_package(sample_brand_id, sample_package_id)
 
         assert isinstance(result, GenerateVariantsResponseDTO)
 
-    def test_dto_validates(self, sample_package_id):
+    def test_dto_validates(self, sample_brand_id, sample_package_id):
         """Returned DTO passes model_validate."""
-        result = variants_service.generate_variants_for_package(sample_package_id)
+        result = variants_service.generate_variants_for_package(sample_brand_id, sample_package_id)
 
         # Should not raise
         validated = GenerateVariantsResponseDTO.model_validate(result.model_dump())
         assert validated.status == "generated"
 
-    def test_status_is_generated(self, sample_package_id):
+    def test_status_is_generated(self, sample_brand_id, sample_package_id):
         """Response status is 'generated'."""
-        result = variants_service.generate_variants_for_package(sample_package_id)
+        result = variants_service.generate_variants_for_package(sample_brand_id, sample_package_id)
 
         assert result.status == "generated"
 
-    def test_package_id_matches(self, sample_package_id):
+    def test_package_id_matches(self, sample_brand_id, sample_package_id):
         """Response has correct package_id."""
-        result = variants_service.generate_variants_for_package(sample_package_id)
+        result = variants_service.generate_variants_for_package(sample_brand_id, sample_package_id)
 
         assert result.package_id == sample_package_id
 
-    def test_has_variants_list(self, sample_package_id):
+    def test_has_variants_list(self, sample_brand_id, sample_package_id):
         """Response includes variants list."""
-        result = variants_service.generate_variants_for_package(sample_package_id)
+        result = variants_service.generate_variants_for_package(sample_brand_id, sample_package_id)
 
         assert isinstance(result.variants, list)
         assert len(result.variants) > 0
 
-    def test_count_matches_variants(self, sample_package_id):
+    def test_count_matches_variants(self, sample_brand_id, sample_package_id):
         """Count matches actual variants length."""
-        result = variants_service.generate_variants_for_package(sample_package_id)
+        result = variants_service.generate_variants_for_package(sample_brand_id, sample_package_id)
 
         assert result.count == len(result.variants)
 
-    def test_variants_have_body(self, sample_package_id):
+    def test_variants_have_body(self, sample_brand_id, sample_package_id):
         """All variants have non-empty body."""
-        result = variants_service.generate_variants_for_package(sample_package_id)
+        result = variants_service.generate_variants_for_package(sample_brand_id, sample_package_id)
 
         for variant in result.variants:
             assert variant.body, "Variant should have body content"
 
-    def test_variants_have_valid_channels(self, sample_package_id):
+    def test_variants_have_valid_channels(self, sample_brand_id, sample_package_id):
         """Variants have valid channel values."""
-        result = variants_service.generate_variants_for_package(sample_package_id)
+        result = variants_service.generate_variants_for_package(sample_brand_id, sample_package_id)
 
         for variant in result.variants:
             assert isinstance(variant.channel, Channel)
 
-    def test_variants_are_draft_status(self, sample_package_id):
+    def test_variants_are_draft_status(self, sample_brand_id, sample_package_id):
         """All variants are in draft status."""
-        result = variants_service.generate_variants_for_package(sample_package_id)
+        result = variants_service.generate_variants_for_package(sample_brand_id, sample_package_id)
 
         for variant in result.variants:
             assert variant.status == VariantStatus.DRAFT
@@ -179,35 +186,35 @@ class TestVariantsServiceGenerate:
 class TestVariantsServiceList:
     """Tests for variants_service.list_variants_for_package."""
 
-    def test_returns_variant_list_dto(self, sample_package_id):
+    def test_returns_variant_list_dto(self, sample_brand_id, sample_package_id):
         """Service returns VariantListDTO."""
-        result = variants_service.list_variants_for_package(sample_package_id)
+        result = variants_service.list_variants_for_package(sample_brand_id, sample_package_id)
 
         assert isinstance(result, VariantListDTO)
 
-    def test_dto_validates(self, sample_package_id):
+    def test_dto_validates(self, sample_brand_id, sample_package_id):
         """Returned DTO passes model_validate."""
-        result = variants_service.list_variants_for_package(sample_package_id)
+        result = variants_service.list_variants_for_package(sample_brand_id, sample_package_id)
 
         # Should not raise
         validated = VariantListDTO.model_validate(result.model_dump())
         assert validated.package_id == sample_package_id
 
-    def test_package_id_matches(self, sample_package_id):
+    def test_package_id_matches(self, sample_brand_id, sample_package_id):
         """Response has correct package_id."""
-        result = variants_service.list_variants_for_package(sample_package_id)
+        result = variants_service.list_variants_for_package(sample_brand_id, sample_package_id)
 
         assert result.package_id == sample_package_id
 
-    def test_has_variants_list(self, sample_package_id):
+    def test_has_variants_list(self, sample_brand_id, sample_package_id):
         """Response includes variants list."""
-        result = variants_service.list_variants_for_package(sample_package_id)
+        result = variants_service.list_variants_for_package(sample_brand_id, sample_package_id)
 
         assert isinstance(result.variants, list)
 
-    def test_count_matches_variants(self, sample_package_id):
+    def test_count_matches_variants(self, sample_brand_id, sample_package_id):
         """Count matches actual variants length."""
-        result = variants_service.list_variants_for_package(sample_package_id)
+        result = variants_service.list_variants_for_package(sample_brand_id, sample_package_id)
 
         assert result.count == len(result.variants)
 

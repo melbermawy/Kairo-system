@@ -2,6 +2,7 @@
 Opportunities Engine.
 
 PR-3: Service Layer + Engines Layer Skeleton.
+PR-6: Added RunContext + structured logging.
 
 Manages opportunity lifecycle:
 - Generation of Today board
@@ -27,9 +28,11 @@ from kairo.hero.dto import (
     TodayBoardDTO,
     TodayBoardMetaDTO,
 )
+from kairo.hero.observability import log_engine_event
+from kairo.hero.run_context import RunContext
 
 
-def generate_today_board(brand_id: UUID) -> TodayBoardDTO:
+def generate_today_board(ctx: RunContext) -> TodayBoardDTO:
     """
     Generate the Today board for a brand.
 
@@ -41,8 +44,10 @@ def generate_today_board(brand_id: UUID) -> TodayBoardDTO:
     - Primary channel in {linkedin, x}
     - Do not persist opportunities yet (no DB writes here in PR-3)
 
+    PR-6: Now requires RunContext for observability.
+
     Args:
-        brand_id: UUID of the brand
+        ctx: RunContext with run_id, brand_id, flow, trigger_source
 
     Returns:
         TodayBoardDTO with stub opportunities
@@ -50,36 +55,64 @@ def generate_today_board(brand_id: UUID) -> TodayBoardDTO:
     Raises:
         Brand.DoesNotExist: If brand not found
     """
-    # Look up brand from DB to validate it exists
-    brand = Brand.objects.get(id=brand_id)
-
-    # Build brand snapshot from actual brand data
-    snapshot = _build_brand_snapshot(brand)
-
-    # Generate deterministic stub opportunities
-    opportunities = _generate_stub_opportunities(brand_id, brand.name)
-
-    # Build metadata
-    now = datetime.now(timezone.utc)
-    channel_mix = _compute_channel_mix(opportunities)
-
-    meta = TodayBoardMetaDTO(
-        generated_at=now,
-        source="hero_f1",
-        degraded=False,
-        notes=["PR-3 stub implementation - real LLM generation comes in PR-8"],
-        opportunity_count=len(opportunities),
-        dominant_pillar=snapshot.pillars[0].name if snapshot.pillars else None,
-        dominant_persona=snapshot.personas[0].name if snapshot.personas else None,
-        channel_mix=channel_mix,
+    log_engine_event(
+        ctx,
+        engine="opportunities_engine",
+        operation="generate_today_board",
+        status="start",
     )
 
-    return TodayBoardDTO(
-        brand_id=brand_id,
-        snapshot=snapshot,
-        opportunities=opportunities,
-        meta=meta,
-    )
+    try:
+        # Look up brand from DB to validate it exists
+        brand = Brand.objects.get(id=ctx.brand_id)
+
+        # Build brand snapshot from actual brand data
+        snapshot = _build_brand_snapshot(brand)
+
+        # Generate deterministic stub opportunities
+        opportunities = _generate_stub_opportunities(ctx.brand_id, brand.name)
+
+        # Build metadata
+        now = datetime.now(timezone.utc)
+        channel_mix = _compute_channel_mix(opportunities)
+
+        meta = TodayBoardMetaDTO(
+            generated_at=now,
+            source="hero_f1",
+            degraded=False,
+            notes=["PR-3 stub implementation - real LLM generation comes in PR-8"],
+            opportunity_count=len(opportunities),
+            dominant_pillar=snapshot.pillars[0].name if snapshot.pillars else None,
+            dominant_persona=snapshot.personas[0].name if snapshot.personas else None,
+            channel_mix=channel_mix,
+        )
+
+        board = TodayBoardDTO(
+            brand_id=ctx.brand_id,
+            snapshot=snapshot,
+            opportunities=opportunities,
+            meta=meta,
+        )
+
+        log_engine_event(
+            ctx,
+            engine="opportunities_engine",
+            operation="generate_today_board",
+            status="success",
+            extra={"num_opportunities": len(opportunities)},
+        )
+
+        return board
+
+    except Exception as exc:
+        log_engine_event(
+            ctx,
+            engine="opportunities_engine",
+            operation="generate_today_board",
+            status="failure",
+            error_summary=f"{exc.__class__.__name__}: {exc}",
+        )
+        raise
 
 
 def _build_brand_snapshot(brand: Brand) -> BrandSnapshotDTO:

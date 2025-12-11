@@ -2,10 +2,11 @@
 Learning Service.
 
 PR-4: Decisions + Learning Pipeline (Deterministic, No LLM).
+PR-6: Added RunContext construction + propagation.
 
-Provides learning summary and execution event processing for brand context.
+Provides learning summary and execution event processing for brand context (F3_learning flow).
 
-Per PR-map-and-standards §PR-3 4.7 and §PR-4.
+Per PR-map-and-standards §PR-3 4.7, §PR-4, and §PR-6.
 """
 
 import logging
@@ -13,6 +14,7 @@ from uuid import UUID
 
 from kairo.hero.dto import LearningEventDTO, LearningSummaryDTO
 from kairo.hero.engines import learning_engine
+from kairo.hero.run_context import RunContext, create_run_context
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,9 @@ def get_learning_summary(brand_id: UUID) -> LearningSummaryDTO:
     - Aggregates performance metrics by pattern, channel
     - Returns a computed LearningSummaryDTO
 
+    Note: This is a read-only operation that doesn't modify state,
+    so no RunContext needed (doesn't call engine entrypoint with logging).
+
     Args:
         brand_id: UUID of the brand
 
@@ -38,6 +43,7 @@ def get_learning_summary(brand_id: UUID) -> LearningSummaryDTO:
 def process_recent_execution_events(
     brand_id: UUID,
     hours: int = 24,
+    ctx: RunContext | None = None,
 ) -> dict:
     """
     Process recent execution events for a brand and generate learning events.
@@ -51,9 +57,14 @@ def process_recent_execution_events(
     - Creates LearningEvent rows in the database
     - Returns summary statistics
 
+    PR-6: Constructs RunContext if not provided (for F3_learning flow).
+    The trigger_source defaults to "api" but should be "manual" when called
+    from a management command.
+
     Args:
         brand_id: UUID of the brand to process
         hours: Number of hours to look back (default 24)
+        ctx: Optional RunContext. If None, creates one with trigger_source="api"
 
     Returns:
         Dict with processing statistics:
@@ -61,8 +72,15 @@ def process_recent_execution_events(
         - learning_events_created: Number of LearningEvents created
         - learning_events: List of created LearningEventDTOs
     """
+    if ctx is None:
+        ctx = create_run_context(
+            brand_id=brand_id,
+            flow="F3_learning",
+            trigger_source="api",
+        )
+
     result = learning_engine.process_execution_events(
-        brand_id=brand_id,
+        ctx=ctx,
         window_hours=hours,
     )
 
@@ -89,6 +107,9 @@ def get_learning_events(
 ) -> list[LearningEventDTO]:
     """
     Get recent learning events for a brand.
+
+    Note: This is a read-only operation that doesn't modify state,
+    so no RunContext needed.
 
     Args:
         brand_id: UUID of the brand

@@ -2,6 +2,7 @@
 Learning Engine.
 
 PR-4: Decisions + Learning Pipeline (Deterministic, No LLM).
+PR-6: Added RunContext + structured logging.
 
 Ingests ExecutionEvents from platforms, produces LearningEvents, and
 pushes updates back into other engines:
@@ -27,6 +28,8 @@ from django.db.models import Count
 from kairo.core.enums import Channel, DecisionType, LearningSignalType
 from kairo.core.models import ExecutionEvent, LearningEvent, Variant
 from kairo.hero.dto import LearningEventDTO, LearningSummaryDTO
+from kairo.hero.observability import log_engine_event
+from kairo.hero.run_context import RunContext
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +71,7 @@ class ProcessingResult(NamedTuple):
 
 
 def process_execution_events(
-    brand_id: UUID,
+    ctx: RunContext,
     window_hours: int = 24,
 ) -> ProcessingResult:
     """
@@ -86,115 +89,157 @@ def process_execution_events(
     - It only writes to LearningEvent table
     - Weight deltas are bounded in [-1.0, +1.0] per scope per run
 
+    PR-6: Now requires RunContext for observability.
+
     Args:
-        brand_id: UUID of the brand to process
+        ctx: RunContext with run_id, brand_id, flow, trigger_source
         window_hours: Number of hours to look back (default 24)
 
     Returns:
         ProcessingResult with counts and list of created LearningEventDTOs
     """
-    now = datetime.now(timezone.utc)
-    window_start = now - timedelta(hours=window_hours)
+    log_engine_event(
+        ctx,
+        engine="learning_engine",
+        operation="process_execution_events",
+        status="start",
+        extra={"window_hours": window_hours},
+    )
 
-    # Fetch ExecutionEvents with decision_type set within the time window
-    # These are the events that represent user decisions
-    execution_events = ExecutionEvent.objects.filter(
-        brand_id=brand_id,
-        decision_type__isnull=False,
-        occurred_at__gte=window_start,
-        occurred_at__lte=now,
-    ).select_related("variant", "variant__package")
+    try:
+        now = datetime.now(timezone.utc)
+        window_start = now - timedelta(hours=window_hours)
 
-    events_list = list(execution_events)
-    if not events_list:
+        # Fetch ExecutionEvents with decision_type set within the time window
+        # These are the events that represent user decisions
+        execution_events = ExecutionEvent.objects.filter(
+            brand_id=ctx.brand_id,
+            decision_type__isnull=False,
+            occurred_at__gte=window_start,
+            occurred_at__lte=now,
+        ).select_related("variant", "variant__package")
+
+        events_list = list(execution_events)
+        if not events_list:
+            logger.info(
+                "No execution events with decisions found",
+                extra={
+                    "brand_id": str(ctx.brand_id),
+                    "window_hours": window_hours,
+                },
+            )
+            log_engine_event(
+                ctx,
+                engine="learning_engine",
+                operation="process_execution_events",
+                status="success",
+                extra={
+                    "events_processed": 0,
+                    "learning_events_created": 0,
+                },
+            )
+            return ProcessingResult(
+                events_processed=0,
+                learning_events_created=0,
+                learning_events=[],
+            )
+
+        # Aggregate events by (variant_id, decision_type, channel)
+        aggregated: dict[tuple, list[ExecutionEvent]] = defaultdict(list)
+        for event in events_list:
+            key = (event.variant_id, event.decision_type, event.channel)
+            aggregated[key].append(event)
+
+        # Create learning events based on aggregated decisions
+        learning_events: list[LearningEvent] = []
+
+        with transaction.atomic():
+            for (variant_id, decision_type, channel), events in aggregated.items():
+                decision_enum = DecisionType(decision_type)
+
+                if decision_enum not in DECISION_WEIGHT_MAP:
+                    logger.warning(
+                        "Unknown decision type in execution event",
+                        extra={
+                            "decision_type": decision_type,
+                            "variant_id": str(variant_id),
+                        },
+                    )
+                    continue
+
+                signal_type, base_weight_delta = DECISION_WEIGHT_MAP[decision_enum]
+
+                # Scale weight delta by event count (bounded to [-1.0, +1.0])
+                event_count = len(events)
+                scaled_delta = base_weight_delta * min(event_count, 10)  # Cap multiplier
+                bounded_delta = max(-1.0, min(1.0, scaled_delta))
+
+                # Get variant and related IDs for the learning event
+                first_event = events[0]
+                variant = first_event.variant
+                pattern_id = variant.pattern_template_id if variant else None
+                opportunity_id = None
+                if variant and variant.package:
+                    opportunity_id = variant.package.origin_opportunity_id
+
+                # Create the learning event
+                learning_event = LearningEvent.objects.create(
+                    brand_id=ctx.brand_id,
+                    signal_type=signal_type.value,
+                    pattern_id=pattern_id,
+                    opportunity_id=opportunity_id,
+                    variant_id=variant_id,
+                    payload={
+                        "decision_type": decision_type,
+                        "channel": channel,
+                        "weight_delta": bounded_delta,
+                        "event_count": event_count,
+                        "window_hours": window_hours,
+                    },
+                    derived_from=[str(e.id) for e in events],
+                    effective_at=now,
+                )
+                learning_events.append(learning_event)
+
+        # Convert to DTOs
+        learning_event_dtos = [_learning_event_to_dto(le) for le in learning_events]
+
         logger.info(
-            "No execution events with decisions found",
+            "Processed execution events",
             extra={
-                "brand_id": str(brand_id),
+                "brand_id": str(ctx.brand_id),
+                "events_processed": len(events_list),
+                "learning_events_created": len(learning_events),
                 "window_hours": window_hours,
             },
         )
-        return ProcessingResult(
-            events_processed=0,
-            learning_events_created=0,
-            learning_events=[],
+
+        log_engine_event(
+            ctx,
+            engine="learning_engine",
+            operation="process_execution_events",
+            status="success",
+            extra={
+                "events_processed": len(events_list),
+                "learning_events_created": len(learning_events),
+            },
         )
 
-    # Aggregate events by (variant_id, decision_type, channel)
-    aggregated: dict[tuple, list[ExecutionEvent]] = defaultdict(list)
-    for event in events_list:
-        key = (event.variant_id, event.decision_type, event.channel)
-        aggregated[key].append(event)
+        return ProcessingResult(
+            events_processed=len(events_list),
+            learning_events_created=len(learning_events),
+            learning_events=learning_event_dtos,
+        )
 
-    # Create learning events based on aggregated decisions
-    learning_events: list[LearningEvent] = []
-
-    with transaction.atomic():
-        for (variant_id, decision_type, channel), events in aggregated.items():
-            decision_enum = DecisionType(decision_type)
-
-            if decision_enum not in DECISION_WEIGHT_MAP:
-                logger.warning(
-                    "Unknown decision type in execution event",
-                    extra={
-                        "decision_type": decision_type,
-                        "variant_id": str(variant_id),
-                    },
-                )
-                continue
-
-            signal_type, base_weight_delta = DECISION_WEIGHT_MAP[decision_enum]
-
-            # Scale weight delta by event count (bounded to [-1.0, +1.0])
-            event_count = len(events)
-            scaled_delta = base_weight_delta * min(event_count, 10)  # Cap multiplier
-            bounded_delta = max(-1.0, min(1.0, scaled_delta))
-
-            # Get variant and related IDs for the learning event
-            first_event = events[0]
-            variant = first_event.variant
-            pattern_id = variant.pattern_template_id if variant else None
-            opportunity_id = None
-            if variant and variant.package:
-                opportunity_id = variant.package.origin_opportunity_id
-
-            # Create the learning event
-            learning_event = LearningEvent.objects.create(
-                brand_id=brand_id,
-                signal_type=signal_type.value,
-                pattern_id=pattern_id,
-                opportunity_id=opportunity_id,
-                variant_id=variant_id,
-                payload={
-                    "decision_type": decision_type,
-                    "channel": channel,
-                    "weight_delta": bounded_delta,
-                    "event_count": event_count,
-                    "window_hours": window_hours,
-                },
-                derived_from=[str(e.id) for e in events],
-                effective_at=now,
-            )
-            learning_events.append(learning_event)
-
-    # Convert to DTOs
-    learning_event_dtos = [_learning_event_to_dto(le) for le in learning_events]
-
-    logger.info(
-        "Processed execution events",
-        extra={
-            "brand_id": str(brand_id),
-            "events_processed": len(events_list),
-            "learning_events_created": len(learning_events),
-            "window_hours": window_hours,
-        },
-    )
-
-    return ProcessingResult(
-        events_processed=len(events_list),
-        learning_events_created=len(learning_events),
-        learning_events=learning_event_dtos,
-    )
+    except Exception as exc:
+        log_engine_event(
+            ctx,
+            engine="learning_engine",
+            operation="process_execution_events",
+            status="failure",
+            error_summary=f"{exc.__class__.__name__}: {exc}",
+        )
+        raise
 
 
 # =============================================================================

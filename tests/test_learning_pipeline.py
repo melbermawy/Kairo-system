@@ -39,6 +39,7 @@ from kairo.core.models import (
     Variant,
 )
 from kairo.hero.engines import learning_engine
+from kairo.hero.run_context import create_run_context
 from kairo.hero.services import learning_service
 
 
@@ -132,6 +133,16 @@ def execution_event_with_decision(brand, variant):
     )
 
 
+@pytest.fixture
+def f3_context(brand):
+    """Create a RunContext for F3_learning flow."""
+    return create_run_context(
+        brand_id=brand.id,
+        flow="F3_learning",
+        trigger_source="api",
+    )
+
+
 # =============================================================================
 # LEARNING ENGINE TESTS
 # =============================================================================
@@ -142,30 +153,30 @@ class TestLearningEngineProcessing:
     """Tests for learning_engine.process_execution_events."""
 
     def test_processes_execution_events_with_decisions(
-        self, brand, variant, execution_event_with_decision
+        self, brand, variant, execution_event_with_decision, f3_context
     ):
         """ExecutionEvents with decision_type are processed."""
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
 
         assert result.events_processed == 1
         assert result.learning_events_created == 1
         assert len(result.learning_events) == 1
 
     def test_creates_learning_event_with_correct_signal_type(
-        self, brand, variant, execution_event_with_decision
+        self, brand, variant, execution_event_with_decision, f3_context
     ):
         """LearningEvent has correct signal_type for VARIANT_APPROVED."""
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
 
         learning_event = result.learning_events[0]
         # VARIANT_APPROVED maps to PATTERN_PERFORMANCE_UPDATE
         assert learning_event.signal_type == LearningSignalType.PATTERN_PERFORMANCE_UPDATE
 
     def test_learning_event_has_correct_payload(
-        self, brand, variant, execution_event_with_decision
+        self, brand, variant, execution_event_with_decision, f3_context
     ):
         """LearningEvent payload contains expected fields."""
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
 
         learning_event = result.learning_events[0]
         payload = learning_event.payload
@@ -176,15 +187,15 @@ class TestLearningEngineProcessing:
         assert "event_count" in payload
 
     def test_weight_delta_is_positive_for_approved(
-        self, brand, variant, execution_event_with_decision
+        self, brand, variant, execution_event_with_decision, f3_context
     ):
         """VARIANT_APPROVED has positive weight_delta."""
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
 
         learning_event = result.learning_events[0]
         assert learning_event.payload["weight_delta"] > 0
 
-    def test_weight_delta_is_negative_for_rejected(self, brand, variant):
+    def test_weight_delta_is_negative_for_rejected(self, brand, variant, f3_context):
         """VARIANT_REJECTED has negative weight_delta."""
         ExecutionEvent.objects.create(
             brand=brand,
@@ -196,12 +207,12 @@ class TestLearningEngineProcessing:
             occurred_at=datetime.now(timezone.utc),
         )
 
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
 
         learning_event = result.learning_events[0]
         assert learning_event.payload["weight_delta"] < 0
 
-    def test_weight_delta_is_bounded(self, brand, variant):
+    def test_weight_delta_is_bounded(self, brand, variant, f3_context):
         """Weight delta is bounded to [-1.0, +1.0] even with many events."""
         now = datetime.now(timezone.utc)
         # Create 20 events to try to exceed bounds
@@ -216,20 +227,20 @@ class TestLearningEngineProcessing:
                 occurred_at=now - timedelta(minutes=i),
             )
 
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
 
         learning_event = result.learning_events[0]
         assert -1.0 <= learning_event.payload["weight_delta"] <= 1.0
 
-    def test_returns_empty_when_no_events(self, brand):
+    def test_returns_empty_when_no_events(self, brand, f3_context):
         """Returns empty result when no ExecutionEvents exist."""
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
 
         assert result.events_processed == 0
         assert result.learning_events_created == 0
         assert len(result.learning_events) == 0
 
-    def test_ignores_events_without_decision_type(self, brand, variant):
+    def test_ignores_events_without_decision_type(self, brand, variant, f3_context):
         """ExecutionEvents without decision_type are ignored."""
         # Create event without decision_type
         ExecutionEvent.objects.create(
@@ -242,12 +253,12 @@ class TestLearningEngineProcessing:
             occurred_at=datetime.now(timezone.utc),
         )
 
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
 
         assert result.events_processed == 0
         assert result.learning_events_created == 0
 
-    def test_ignores_events_outside_window(self, brand, variant):
+    def test_ignores_events_outside_window(self, brand, variant, f3_context):
         """ExecutionEvents outside the time window are ignored."""
         # Create event from 48 hours ago
         ExecutionEvent.objects.create(
@@ -261,12 +272,12 @@ class TestLearningEngineProcessing:
         )
 
         # Process with 24 hour window
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
 
         assert result.events_processed == 0
         assert result.learning_events_created == 0
 
-    def test_aggregates_events_by_variant_and_decision(self, brand, variant):
+    def test_aggregates_events_by_variant_and_decision(self, brand, variant, f3_context):
         """Multiple events with same variant and decision are aggregated."""
         now = datetime.now(timezone.utc)
         # Create 3 VARIANT_APPROVED events for same variant
@@ -281,14 +292,14 @@ class TestLearningEngineProcessing:
                 occurred_at=now - timedelta(minutes=i),
             )
 
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
 
         # Should create only 1 LearningEvent (aggregated)
         assert result.events_processed == 3
         assert result.learning_events_created == 1
         assert result.learning_events[0].payload["event_count"] == 3
 
-    def test_different_decision_types_create_separate_events(self, brand, variant):
+    def test_different_decision_types_create_separate_events(self, brand, variant, f3_context):
         """Different decision types create separate LearningEvents."""
         now = datetime.now(timezone.utc)
 
@@ -314,18 +325,18 @@ class TestLearningEngineProcessing:
             occurred_at=now,
         )
 
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
 
         assert result.events_processed == 2
         assert result.learning_events_created == 2
 
     def test_learning_event_persisted_to_db(
-        self, brand, variant, execution_event_with_decision
+        self, brand, variant, execution_event_with_decision, f3_context
     ):
         """LearningEvents are persisted to the database."""
         initial_count = LearningEvent.objects.filter(brand=brand).count()
 
-        learning_engine.process_execution_events(brand.id, window_hours=24)
+        learning_engine.process_execution_events(f3_context, window_hours=24)
 
         final_count = LearningEvent.objects.filter(brand=brand).count()
         assert final_count == initial_count + 1
@@ -340,7 +351,7 @@ class TestLearningEngineProcessing:
 class TestDecisionTypeMapping:
     """Tests for DECISION_WEIGHT_MAP correctness."""
 
-    def test_variant_approved_maps_to_pattern_performance(self, brand, variant):
+    def test_variant_approved_maps_to_pattern_performance(self, brand, variant, f3_context):
         """VARIANT_APPROVED maps to PATTERN_PERFORMANCE_UPDATE."""
         ExecutionEvent.objects.create(
             brand=brand,
@@ -352,10 +363,10 @@ class TestDecisionTypeMapping:
             occurred_at=datetime.now(timezone.utc),
         )
 
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
         assert result.learning_events[0].signal_type == LearningSignalType.PATTERN_PERFORMANCE_UPDATE
 
-    def test_variant_rejected_maps_to_pattern_performance(self, brand, variant):
+    def test_variant_rejected_maps_to_pattern_performance(self, brand, variant, f3_context):
         """VARIANT_REJECTED maps to PATTERN_PERFORMANCE_UPDATE."""
         ExecutionEvent.objects.create(
             brand=brand,
@@ -367,10 +378,10 @@ class TestDecisionTypeMapping:
             occurred_at=datetime.now(timezone.utc),
         )
 
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
         assert result.learning_events[0].signal_type == LearningSignalType.PATTERN_PERFORMANCE_UPDATE
 
-    def test_opportunity_pinned_maps_to_opportunity_score(self, brand, variant):
+    def test_opportunity_pinned_maps_to_opportunity_score(self, brand, variant, f3_context):
         """OPPORTUNITY_PINNED maps to OPPORTUNITY_SCORE_UPDATE."""
         ExecutionEvent.objects.create(
             brand=brand,
@@ -382,10 +393,10 @@ class TestDecisionTypeMapping:
             occurred_at=datetime.now(timezone.utc),
         )
 
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
         assert result.learning_events[0].signal_type == LearningSignalType.OPPORTUNITY_SCORE_UPDATE
 
-    def test_package_approved_maps_to_channel_preference(self, brand, variant):
+    def test_package_approved_maps_to_channel_preference(self, brand, variant, f3_context):
         """PACKAGE_APPROVED maps to CHANNEL_PREFERENCE_UPDATE."""
         ExecutionEvent.objects.create(
             brand=brand,
@@ -397,7 +408,7 @@ class TestDecisionTypeMapping:
             occurred_at=datetime.now(timezone.utc),
         )
 
-        result = learning_engine.process_execution_events(brand.id, window_hours=24)
+        result = learning_engine.process_execution_events(f3_context, window_hours=24)
         assert result.learning_events[0].signal_type == LearningSignalType.CHANNEL_PREFERENCE_UPDATE
 
 
@@ -486,8 +497,15 @@ class TestBrandIsolation:
             occurred_at=now,
         )
 
+        # Create context for brand B
+        ctx_b = create_run_context(
+            brand_id=brand_b.id,
+            flow="F3_learning",
+            trigger_source="api",
+        )
+
         # Process for brand B
-        result = learning_engine.process_execution_events(brand_b.id, window_hours=24)
+        result = learning_engine.process_execution_events(ctx_b, window_hours=24)
 
         # Brand B should have zero events processed
         assert result.events_processed == 0
@@ -497,7 +515,7 @@ class TestBrandIsolation:
         # Verify no LearningEvents created for brand B
         assert LearningEvent.objects.filter(brand=brand_b).count() == 0
 
-    def test_learning_events_scoped_to_brand(self, tenant, brand, variant):
+    def test_learning_events_scoped_to_brand(self, tenant, brand, variant, f3_context):
         """LearningEvents are created with correct brand_id."""
         # Create brand B with its own variant
         brand_b = Brand.objects.create(
@@ -540,10 +558,17 @@ class TestBrandIsolation:
             occurred_at=now,
         )
 
-        # Process brand A
-        result_a = learning_engine.process_execution_events(brand.id, window_hours=24)
+        # Create context for brand B
+        ctx_b = create_run_context(
+            brand_id=brand_b.id,
+            flow="F3_learning",
+            trigger_source="api",
+        )
+
+        # Process brand A (using f3_context fixture)
+        result_a = learning_engine.process_execution_events(f3_context, window_hours=24)
         # Process brand B
-        result_b = learning_engine.process_execution_events(brand_b.id, window_hours=24)
+        result_b = learning_engine.process_execution_events(ctx_b, window_hours=24)
 
         # Each brand should have exactly 1 event processed
         assert result_a.events_processed == 1

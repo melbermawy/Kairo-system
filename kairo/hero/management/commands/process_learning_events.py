@@ -2,6 +2,7 @@
 Management command to process learning events.
 
 PR-4: Decisions + Learning Pipeline (Deterministic, No LLM).
+PR-6: Added RunContext construction with trigger_source="manual".
 
 Usage:
     python manage.py process_learning_events --brand-id <uuid> [--hours <int>]
@@ -13,6 +14,10 @@ Per PR-map-and-standards §PR-4:
 - Accepts --brand-id (required) and --hours (default 24)
 - Calls learning_service.process_recent_execution_events
 - Prints summary of events processed and learning events created
+
+Per PR-map-and-standards §PR-6:
+- Creates a RunContext with flow="F3_learning" and trigger_source="manual"
+- Passes the context to the service for engine logging
 
 Failure Behavior (PR-4 Audit §5):
 - If an exception occurs during processing, the command:
@@ -28,6 +33,7 @@ from uuid import UUID
 from django.core.management.base import BaseCommand, CommandError
 
 from kairo.core.models import Brand
+from kairo.hero.run_context import create_run_context
 from kairo.hero.services import learning_service
 
 
@@ -73,10 +79,18 @@ class Command(BaseCommand):
             f"(last {hours} hours)..."
         )
 
-        # Process events
+        # PR-6: Create RunContext with F3_learning flow and manual trigger
+        ctx = create_run_context(
+            brand_id=brand_id,
+            flow="F3_learning",
+            trigger_source="manual",
+        )
+
+        # Process events with context
         result = learning_service.process_recent_execution_events(
             brand_id=brand_id,
             hours=hours,
+            ctx=ctx,
         )
 
         # Report results

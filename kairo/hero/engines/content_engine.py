@@ -2,6 +2,7 @@
 Content Engine.
 
 PR-3: Service Layer + Engines Layer Skeleton.
+PR-6: Added RunContext + structured logging.
 
 Owns ContentPackage and Variant lifecycles:
 - Create packages from opportunities
@@ -20,10 +21,12 @@ from uuid import UUID, uuid4
 from kairo.core.enums import Channel, CreatedVia, PackageStatus, VariantStatus
 from kairo.core.models import ContentPackage, Variant
 from kairo.hero.dto import ContentPackageDTO, VariantDTO
+from kairo.hero.observability import log_engine_event
+from kairo.hero.run_context import RunContext
 
 
 def create_package_from_opportunity(
-    brand_id: UUID,
+    ctx: RunContext,
     opportunity_id: UUID,
 ) -> ContentPackage:
     """
@@ -40,43 +43,72 @@ def create_package_from_opportunity(
     - Call package graph for thesis generation
     - Respect idempotency (same brand+opportunity = same package)
 
+    PR-6: Now requires RunContext for observability.
+
     Args:
-        brand_id: UUID of the brand
+        ctx: RunContext with run_id, brand_id, flow, trigger_source
         opportunity_id: UUID of the source opportunity
 
     Returns:
         In-memory ContentPackage instance (not persisted)
     """
-    now = datetime.now(timezone.utc)
-
-    # Generate deterministic package ID based on brand + opportunity
-    # This ensures idempotency for stub behavior
-    package_id = _deterministic_uuid(brand_id, opportunity_id, "package")
-
-    # Create in-memory ContentPackage (NOT saved to DB)
-    package = ContentPackage(
-        id=package_id,
-        brand_id=brand_id,
-        title=f"Package from opportunity {str(opportunity_id)[:8]}",
-        status=PackageStatus.DRAFT,
-        origin_opportunity_id=opportunity_id,
-        persona_id=None,
-        pillar_id=None,
-        channels=[Channel.LINKEDIN.value, Channel.X.value],
-        planned_publish_start=None,
-        planned_publish_end=None,
-        owner_user_id=None,
-        notes="PR-3 stub package - real generation comes in PR-9",
-        created_via=CreatedVia.AI_SUGGESTED,
+    log_engine_event(
+        ctx,
+        engine="content_engine",
+        operation="create_package_from_opportunity",
+        status="start",
+        extra={"opportunity_id": str(opportunity_id)},
     )
-    # Set timestamps manually since we're not saving
-    package.created_at = now
-    package.updated_at = now
 
-    return package
+    try:
+        now = datetime.now(timezone.utc)
+
+        # Generate deterministic package ID based on brand + opportunity
+        # This ensures idempotency for stub behavior
+        package_id = _deterministic_uuid(ctx.brand_id, opportunity_id, "package")
+
+        # Create in-memory ContentPackage (NOT saved to DB)
+        package = ContentPackage(
+            id=package_id,
+            brand_id=ctx.brand_id,
+            title=f"Package from opportunity {str(opportunity_id)[:8]}",
+            status=PackageStatus.DRAFT,
+            origin_opportunity_id=opportunity_id,
+            persona_id=None,
+            pillar_id=None,
+            channels=[Channel.LINKEDIN.value, Channel.X.value],
+            planned_publish_start=None,
+            planned_publish_end=None,
+            owner_user_id=None,
+            notes="PR-3 stub package - real generation comes in PR-9",
+            created_via=CreatedVia.AI_SUGGESTED,
+        )
+        # Set timestamps manually since we're not saving
+        package.created_at = now
+        package.updated_at = now
+
+        log_engine_event(
+            ctx,
+            engine="content_engine",
+            operation="create_package_from_opportunity",
+            status="success",
+            extra={"package_id": str(package.id)},
+        )
+
+        return package
+
+    except Exception as exc:
+        log_engine_event(
+            ctx,
+            engine="content_engine",
+            operation="create_package_from_opportunity",
+            status="failure",
+            error_summary=f"{exc.__class__.__name__}: {exc}",
+        )
+        raise
 
 
-def generate_variants_for_package(package_id: UUID) -> list[Variant]:
+def generate_variants_for_package(ctx: RunContext, package_id: UUID) -> list[Variant]:
     """
     Generate content variants for a package across its target channels.
 
@@ -90,73 +122,100 @@ def generate_variants_for_package(package_id: UUID) -> list[Variant]:
     - Call variants graph for content generation
     - Reject if variants already exist (no regeneration in PRD-1)
 
+    PR-6: Now requires RunContext for observability.
+
     Args:
+        ctx: RunContext with run_id, brand_id, flow, trigger_source
         package_id: UUID of the package
 
     Returns:
         List of in-memory Variant instances (not persisted)
     """
-    now = datetime.now(timezone.utc)
+    log_engine_event(
+        ctx,
+        engine="content_engine",
+        operation="generate_variants_for_package",
+        status="start",
+        extra={"package_id": str(package_id)},
+    )
 
-    # Deterministic brand_id for stub (would come from package lookup in real impl)
-    stub_brand_id = UUID("12345678-1234-5678-1234-567812345678")
+    try:
+        now = datetime.now(timezone.utc)
 
-    variants = []
+        variants = []
 
-    # Generate variant for each supported channel
-    channels_content = {
-        Channel.LINKEDIN: {
-            "body": (
-                "Here's what we've learned about building great products:\n\n"
-                "1. Start with the problem, not the solution\n"
-                "2. Talk to customers before writing code\n"
-                "3. Ship early, iterate often\n"
-                "4. Measure what matters\n\n"
-                "What would you add to this list?"
-            ),
-            "cta": "Share your thoughts in the comments",
-        },
-        Channel.X: {
-            "body": (
-                "Product lesson learned the hard way:\n\n"
-                "Don't build features nobody asked for.\n\n"
-                "Talk to 10 customers before writing a single line of code.\n\n"
-                "Thread 🧵"
-            ),
-            "cta": "Follow for more",
-        },
-    }
+        # Generate variant for each supported channel
+        channels_content = {
+            Channel.LINKEDIN: {
+                "body": (
+                    "Here's what we've learned about building great products:\n\n"
+                    "1. Start with the problem, not the solution\n"
+                    "2. Talk to customers before writing code\n"
+                    "3. Ship early, iterate often\n"
+                    "4. Measure what matters\n\n"
+                    "What would you add to this list?"
+                ),
+                "cta": "Share your thoughts in the comments",
+            },
+            Channel.X: {
+                "body": (
+                    "Product lesson learned the hard way:\n\n"
+                    "Don't build features nobody asked for.\n\n"
+                    "Talk to 10 customers before writing a single line of code.\n\n"
+                    "Thread 🧵"
+                ),
+                "cta": "Follow for more",
+            },
+        }
 
-    for i, (channel, content) in enumerate(channels_content.items()):
-        variant_id = _deterministic_uuid(package_id, UUID(int=i), "variant")
+        for i, (channel, content) in enumerate(channels_content.items()):
+            variant_id = _deterministic_uuid(package_id, UUID(int=i), "variant")
 
-        variant = Variant(
-            id=variant_id,
-            brand_id=stub_brand_id,
-            package_id=package_id,
-            channel=channel.value,
-            status=VariantStatus.DRAFT,
-            pattern_template_id=None,
-            raw_prompt_context={"stub": True},
-            draft_text=content["body"],
-            edited_text="",
-            approved_text="",
-            generated_by_model="stub-pr3",
-            proposed_at=now,
-            scheduled_publish_at=None,
-            published_at=None,
-            last_evaluated_at=None,
-            eval_score=None,
-            eval_notes="",
-            metadata={"pr3_stub": True},
+            variant = Variant(
+                id=variant_id,
+                brand_id=ctx.brand_id,
+                package_id=package_id,
+                channel=channel.value,
+                status=VariantStatus.DRAFT,
+                pattern_template_id=None,
+                raw_prompt_context={"stub": True},
+                draft_text=content["body"],
+                edited_text="",
+                approved_text="",
+                generated_by_model="stub-pr3",
+                proposed_at=now,
+                scheduled_publish_at=None,
+                published_at=None,
+                last_evaluated_at=None,
+                eval_score=None,
+                eval_notes="",
+                metadata={"pr3_stub": True},
+            )
+            # Set timestamps manually since we're not saving
+            variant.created_at = now
+            variant.updated_at = now
+
+            variants.append(variant)
+
+        log_engine_event(
+            ctx,
+            engine="content_engine",
+            operation="generate_variants_for_package",
+            status="success",
+            extra={"num_variants": len(variants)},
         )
-        # Set timestamps manually since we're not saving
-        variant.created_at = now
-        variant.updated_at = now
 
-        variants.append(variant)
+        return variants
 
-    return variants
+    except Exception as exc:
+        log_engine_event(
+            ctx,
+            engine="content_engine",
+            operation="generate_variants_for_package",
+            status="failure",
+            error_summary=f"{exc.__class__.__name__}: {exc}",
+        )
+        raise
 
 
 def package_to_dto(package: ContentPackage) -> ContentPackageDTO:
