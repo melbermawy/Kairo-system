@@ -23,6 +23,7 @@ from .decisions_service import (
     record_package_decision,
     record_variant_decision,
 )
+from .external_signals_service import get_bundle_for_brand
 from .learning_service import get_learning_summary
 from .opportunities_service import create_package_for_opportunity
 from .today_service import get_today_board, regenerate_today_board
@@ -45,4 +46,5 @@ __all__ = [
     "record_package_decision",
     "record_variant_decision",
     "get_learning_summary",
+    "get_bundle_for_brand",
 ]

@@ -1,0 +1,80 @@
+{
+  "trends": [
+    {
+      "id": "trend-demo-001",
+      "topic": "Sustainable Business Practices",
+      "source": "linkedin_trending",
+      "relevance_score": 78.0,
+      "recency_days": 1,
+      "url": "https://example.com/sustainability-trends",
+      "snippet": "ESG initiatives are becoming table stakes for enterprise buyers."
+    },
+    {
+      "id": "trend-demo-002",
+      "topic": "Zero Trust Security",
+      "source": "google_trends",
+      "relevance_score": 88.5,
+      "recency_days": 3,
+      "url": "https://example.com/zero-trust",
+      "snippet": "Organizations are rapidly adopting zero trust architectures."
+    },
+    {
+      "id": "trend-demo-003",
+      "topic": "Generative AI in Marketing",
+      "source": "industry_report",
+      "relevance_score": 92.0,
+      "recency_days": 0,
+      "url": null,
+      "snippet": "Marketing teams report 3x content production with AI assistance."
+    }
+  ],
+  "web_mentions": [
+    {
+      "id": "mention-demo-001",
+      "title": "How Demo Brand is Revolutionizing Content Marketing",
+      "source": "Marketing Week",
+      "url": "https://example.com/demo-brand-feature",
+      "snippet": "An in-depth look at the company's AI-first content strategy.",
+      "published_at": "2024-01-20T09:15:00Z",
+      "relevance_score": 95.0
+    }
+  ],
+  "competitor_posts": [
+    {
+      "id": "comp-demo-001",
+      "competitor_name": "ContentKing",
+      "channel": "linkedin",
+      "post_url": "https://linkedin.com/posts/contentking/new-feature",
+      "post_snippet": "We just launched AI-powered content suggestions!",
+      "engagement_hint": "medium engagement",
+      "published_at": "2024-01-19T11:30:00Z"
+    },
+    {
+      "id": "comp-demo-002",
+      "competitor_name": "MarketMaster",
+      "channel": "x",
+      "post_url": null,
+      "post_snippet": "Thread: 10 content marketing tips for 2024",
+      "engagement_hint": "viral",
+      "published_at": "2024-01-17T16:45:00Z"
+    }
+  ],
+  "social_moments": [
+    {
+      "id": "moment-demo-001",
+      "description": "#ContentMarketing2024 conference live updates",
+      "channel": "x",
+      "relevance_hint": "Target audience actively participating",
+      "recency_hours": 4,
+      "url": "https://twitter.com/hashtag/ContentMarketing2024"
+    },
+    {
+      "id": "moment-demo-002",
+      "description": "LinkedIn viral post about B2B storytelling",
+      "channel": "linkedin",
+      "relevance_hint": "High relevance for thought leadership content",
+      "recency_hours": 18,
+      "url": null
+    }
+  ]
+}
