@@ -306,6 +306,26 @@ class LearningEventDTO(BaseModel):
     created_at: datetime
 
 
+class LearningSummaryDTO(BaseModel):
+    """
+    In-memory DTO for learning summary.
+
+    Per PRD-1 §3.1.10 and 02-canonical-objects.md:
+    "LearningSummary is an in-memory DTO, reconstructed on demand by the
+    LearningEngine. Do not create a table for it."
+
+    Used by opportunities engine for scoring context.
+    """
+    brand_id: UUID
+    generated_at: datetime
+    top_performing_patterns: list[UUID] = Field(default_factory=list)
+    top_performing_channels: list[Channel] = Field(default_factory=list)
+    recent_engagement_score: float | None = None
+    pillar_performance: dict[str, float] = Field(default_factory=dict)
+    persona_engagement: dict[str, float] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
+
+
 # =============================================================================
 # EXTERNAL SIGNALS BUNDLE DTOs
 # =============================================================================

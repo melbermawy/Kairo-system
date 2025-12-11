@@ -1,19 +1,23 @@
 """
-HTTP contract tests for PR-2.
+HTTP contract tests for PR-2 / PR-3.
 
 Tests verify:
 - All hero loop endpoints exist at the correct paths
 - All endpoints return valid JSON
 - All responses validate against the appropriate DTOs
 - Request/response contracts are enforced
+
+PR-3 update: Today board endpoints now require a real Brand in the database
+since the opportunities_engine looks up the brand.
 """
 
 import json
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from django.test import Client
 
+from kairo.core.models import Brand, Tenant
 from kairo.hero.dto import (
     ContentPackageDTO,
     CreatePackageResponseDTO,
@@ -38,9 +42,29 @@ def client() -> Client:
 
 
 @pytest.fixture
-def sample_brand_id() -> str:
-    """A sample brand ID for testing."""
-    return "12345678-1234-5678-1234-567812345678"
+def tenant(db):
+    """Create a test tenant."""
+    return Tenant.objects.create(
+        name="HTTP Contract Test Tenant",
+        slug="http-contract-test",
+    )
+
+
+@pytest.fixture
+def brand(db, tenant):
+    """Create a test brand for Today board tests."""
+    return Brand.objects.create(
+        id=UUID("12345678-1234-5678-1234-567812345678"),
+        tenant=tenant,
+        name="HTTP Contract Test Brand",
+        positioning="Testing HTTP contracts",
+    )
+
+
+@pytest.fixture
+def sample_brand_id(brand) -> str:
+    """A sample brand ID for testing (from real brand)."""
+    return str(brand.id)
 
 
 @pytest.fixture
@@ -114,6 +138,16 @@ class TestTodayBoardEndpoints:
         assert data["error"]["code"] == "invalid_uuid"
         assert "message" in data["error"]
 
+    def test_get_today_board_missing_brand_returns_404(self, client: Client, db):
+        """GET /api/brands/{valid-but-missing}/today returns 404 with error envelope."""
+        missing_id = "99999999-9999-9999-9999-999999999999"
+        response = client.get(f"/api/brands/{missing_id}/today/")
+        assert response.status_code == 404
+        data = response.json()
+        assert "error" in data
+        assert data["error"]["code"] == "not_found"
+        assert "message" in data["error"]
+
     def test_regenerate_today_board_returns_200(self, client: Client, sample_brand_id: str):
         """POST /api/brands/{brand_id}/today/regenerate returns 200."""
         response = client.post(f"/api/brands/{sample_brand_id}/today/regenerate/")
@@ -132,6 +166,15 @@ class TestTodayBoardEndpoints:
         assert dto.status == "regenerated"
         assert dto.today_board is not None
         assert str(dto.today_board.brand_id) == sample_brand_id
+
+    def test_regenerate_today_board_missing_brand_returns_404(self, client: Client, db):
+        """POST /api/brands/{valid-but-missing}/today/regenerate returns 404."""
+        missing_id = "99999999-9999-9999-9999-999999999999"
+        response = client.post(f"/api/brands/{missing_id}/today/regenerate/")
+        assert response.status_code == 404
+        data = response.json()
+        assert "error" in data
+        assert data["error"]["code"] == "not_found"
 
 
 # =============================================================================
