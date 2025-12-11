@@ -209,6 +209,37 @@ class ContentPackageDTO(BaseModel):
     updated_at: datetime
 
 
+class ContentPackageDraftDTO(BaseModel):
+    """
+    Graph/LLM side output for proposed content packages.
+
+    Internal use for graph → engine communication.
+    No DB IDs, includes raw reasoning from LLM.
+
+    Per 09-package-rubric.md §10:
+    - is_valid, package_score, etc. are DTO-only fields (not DB columns)
+    - Engine must filter invalid packages before persistence
+    """
+    title: str
+    thesis: str  # Core content thesis (required, must be non-vacuous)
+    summary: str  # Brief explanation of the package
+    primary_channel: Channel
+    channels: list[Channel] = Field(default_factory=list)
+    cta: str | None = None  # Call-to-action
+    pattern_hints: list[str] = Field(default_factory=list)  # Pattern name hints
+    persona_hint: str | None = None  # Persona name hint, resolved by engine
+    pillar_hint: str | None = None  # Pillar name hint, resolved by engine
+    notes_for_humans: str | None = None
+    raw_reasoning: str | None = None
+    # Per rubric §10: validity tracking (DTO-only, not persisted)
+    is_valid: bool = True  # False if fails hard requirements (§5)
+    rejection_reasons: list[str] = Field(default_factory=list)
+    # Per rubric §7: scoring (DTO-only)
+    package_score: float | None = None  # 0-15 scale per rubric §7
+    package_score_breakdown: dict[str, float] | None = None  # thesis, coherence, relevance, cta, brand_alignment
+    quality_band: Literal["invalid", "weak", "board_ready"] | None = None
+
+
 # =============================================================================
 # VARIANT DTOs
 # =============================================================================
@@ -245,12 +276,24 @@ class VariantDraftDTO(BaseModel):
 
     Internal use for graph → engine communication.
     No DB IDs, includes raw reasoning from LLM.
+
+    Per 10-variant-rubric.md §10:
+    - is_valid, variant_score, etc. are DTO-only fields (not DB columns)
+    - Engine must filter invalid variants before persistence
     """
     channel: Channel
     body: str
+    title: str | None = None  # Some channels (e.g. newsletter) may have titles
     call_to_action: str | None = None
     pattern_hint: str | None = None  # Pattern name hint, resolved to ID by engine
     raw_reasoning: str | None = None
+    # Per rubric §10: validity tracking (DTO-only, not persisted)
+    is_valid: bool = True  # False if fails hard requirements (§3)
+    rejection_reasons: list[str] = Field(default_factory=list)
+    # Per rubric §6: scoring (DTO-only)
+    variant_score: float | None = None  # 0-12 scale per rubric §6
+    variant_score_breakdown: dict[str, float] | None = None  # clarity, anchoring, channel_fit, cta
+    quality_band: Literal["invalid", "weak", "publish_ready"] | None = None
 
 
 class VariantUpdateDTO(BaseModel):

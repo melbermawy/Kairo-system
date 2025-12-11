@@ -365,163 +365,275 @@ class TestOpportunitiesEngine:
 
 
 # =============================================================================
-# CONTENT ENGINE TESTS
+# CONTENT ENGINE TESTS (PR-9 UPDATE)
 # =============================================================================
+# PR-9 changed content_engine to call graphs, so these tests now:
+# 1. Create real DB records (opportunity/package)
+# 2. Mock the graph to return deterministic output
+# 3. Persist packages/variants to DB
+
+
+@pytest.fixture
+def opportunity(brand):
+    """Create a test opportunity for package tests."""
+    from kairo.core.models import Opportunity
+    from kairo.core.enums import OpportunityType, CreatedVia
+
+    return Opportunity.objects.create(
+        brand=brand,
+        title="Test Opportunity for Package",
+        angle="Testing content package creation",
+        type=OpportunityType.TREND,
+        primary_channel=Channel.LINKEDIN,
+        score=80.0,
+        created_via=CreatedVia.AI_SUGGESTED,
+    )
+
+
+@pytest.fixture
+def mock_package_draft():
+    """Mock package draft for deterministic testing."""
+    from kairo.hero.dto import ContentPackageDraftDTO
+
+    return ContentPackageDraftDTO(
+        title="Test Package from Graph",
+        thesis="A comprehensive test thesis about marketing strategies and best practices.",
+        summary="This package covers various marketing topics with practical examples.",
+        primary_channel=Channel.LINKEDIN,
+        channels=[Channel.LINKEDIN, Channel.X],
+        cta="Learn more",
+        is_valid=True,
+        rejection_reasons=[],
+        package_score=12.0,
+        quality_band="board_ready",
+    )
+
+
+@pytest.fixture
+def mock_variant_drafts():
+    """Mock variant drafts for deterministic testing."""
+    from kairo.hero.dto import VariantDraftDTO
+
+    return [
+        VariantDraftDTO(
+            channel=Channel.LINKEDIN,
+            body="This is test content for LinkedIn with multiple paragraphs and insights.",
+            call_to_action="Share your thoughts",
+            is_valid=True,
+            rejection_reasons=[],
+            variant_score=10.0,
+            quality_band="publish_ready",
+        ),
+        VariantDraftDTO(
+            channel=Channel.X,
+            body="Concise X post about marketing strategies. Thread below.",
+            call_to_action="Follow for more",
+            is_valid=True,
+            rejection_reasons=[],
+            variant_score=9.0,
+            quality_band="publish_ready",
+        ),
+    ]
 
 
 @pytest.mark.django_db
 class TestContentEngine:
-    """Tests for content_engine functions."""
+    """Tests for content_engine functions (PR-9 updated with graph mocking)."""
 
-    def test_create_package_returns_content_package(self, brand):
+    def test_create_package_returns_content_package(self, brand, opportunity, mock_package_draft):
         """create_package_from_opportunity returns ContentPackage."""
-        opportunity_id = uuid4()
-
-        result = content_engine.create_package_from_opportunity(brand.id, opportunity_id)
-
-        # It's a model instance (not saved to DB)
         from kairo.core.models import ContentPackage
 
-        assert isinstance(result, ContentPackage)
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_graph:
+            mock_graph.return_value = mock_package_draft
 
-    def test_create_package_has_correct_brand_id(self, brand):
+            result = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
+
+            assert isinstance(result, ContentPackage)
+
+    def test_create_package_has_correct_brand_id(self, brand, opportunity, mock_package_draft):
         """Created package has correct brand_id."""
-        opportunity_id = uuid4()
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_graph:
+            mock_graph.return_value = mock_package_draft
 
-        result = content_engine.create_package_from_opportunity(brand.id, opportunity_id)
+            result = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
 
-        assert result.brand_id == brand.id
+            assert result.brand_id == brand.id
 
-    def test_create_package_has_origin_opportunity_id(self, brand):
+    def test_create_package_has_origin_opportunity_id(self, brand, opportunity, mock_package_draft):
         """Created package references source opportunity."""
-        opportunity_id = uuid4()
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_graph:
+            mock_graph.return_value = mock_package_draft
 
-        result = content_engine.create_package_from_opportunity(brand.id, opportunity_id)
+            result = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
 
-        assert result.origin_opportunity_id == opportunity_id
+            assert result.origin_opportunity_id == opportunity.id
 
-    def test_create_package_has_draft_status(self, brand):
+    def test_create_package_has_draft_status(self, brand, opportunity, mock_package_draft):
         """Created package starts in draft status."""
         from kairo.core.enums import PackageStatus
 
-        opportunity_id = uuid4()
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_graph:
+            mock_graph.return_value = mock_package_draft
 
-        result = content_engine.create_package_from_opportunity(brand.id, opportunity_id)
+            result = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
 
-        assert result.status == PackageStatus.DRAFT.value
+            assert result.status == PackageStatus.DRAFT.value
 
-    def test_create_package_has_channels(self, brand):
+    def test_create_package_has_channels(self, brand, opportunity, mock_package_draft):
         """Created package has target channels."""
-        opportunity_id = uuid4()
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_graph:
+            mock_graph.return_value = mock_package_draft
 
-        result = content_engine.create_package_from_opportunity(brand.id, opportunity_id)
+            result = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
 
-        assert len(result.channels) >= 1
+            assert len(result.channels) >= 1
 
-    def test_create_package_deterministic(self, brand):
-        """Same inputs produce same package ID."""
-        opportunity_id = uuid4()
+    def test_create_package_idempotent(self, brand, opportunity, mock_package_draft):
+        """Same inputs produce same package (idempotency)."""
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_graph:
+            mock_graph.return_value = mock_package_draft
 
-        result1 = content_engine.create_package_from_opportunity(brand.id, opportunity_id)
-        result2 = content_engine.create_package_from_opportunity(brand.id, opportunity_id)
+            result1 = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
+            result2 = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
 
-        assert result1.id == result2.id
+            assert result1.id == result2.id
 
-    def test_create_package_not_persisted(self, db, brand):
-        """Package is not saved to database."""
+    def test_create_package_persisted(self, db, brand, opportunity, mock_package_draft):
+        """Package IS saved to database (PR-9 change)."""
         from kairo.core.models import ContentPackage
 
         initial_count = ContentPackage.objects.count()
-        opportunity_id = uuid4()
 
-        content_engine.create_package_from_opportunity(brand.id, opportunity_id)
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_graph:
+            mock_graph.return_value = mock_package_draft
 
-        assert ContentPackage.objects.count() == initial_count
+            content_engine.create_package_from_opportunity(brand.id, opportunity.id)
 
-    def test_generate_variants_returns_list(self, brand):
+            assert ContentPackage.objects.count() == initial_count + 1
+
+    def test_generate_variants_returns_list(self, brand, opportunity, mock_package_draft, mock_variant_drafts):
         """generate_variants_for_package returns list of Variants."""
-        package_id = uuid4()
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_pkg_graph:
+            mock_pkg_graph.return_value = mock_package_draft
+            package = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
 
-        result = content_engine.generate_variants_for_package(package_id)
+        with patch("kairo.hero.engines.content_engine.graph_hero_variants_from_package") as mock_var_graph:
+            mock_var_graph.return_value = mock_variant_drafts
 
-        assert isinstance(result, list)
-        assert len(result) >= 1
+            result = content_engine.generate_variants_for_package(package.id)
 
-    def test_generate_variants_returns_two_channels(self, brand):
+            assert isinstance(result, list)
+            assert len(result) >= 1
+
+    def test_generate_variants_returns_two_channels(self, brand, opportunity, mock_package_draft, mock_variant_drafts):
         """Generates variants for LinkedIn and X."""
-        package_id = uuid4()
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_pkg_graph:
+            mock_pkg_graph.return_value = mock_package_draft
+            package = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
 
-        result = content_engine.generate_variants_for_package(package_id)
+        with patch("kairo.hero.engines.content_engine.graph_hero_variants_from_package") as mock_var_graph:
+            mock_var_graph.return_value = mock_variant_drafts
 
-        assert len(result) == 2
-        channels = {v.channel for v in result}
-        assert Channel.LINKEDIN.value in channels
-        assert Channel.X.value in channels
+            result = content_engine.generate_variants_for_package(package.id)
 
-    def test_generate_variants_have_body(self, brand):
+            assert len(result) == 2
+            channels = {v.channel for v in result}
+            assert Channel.LINKEDIN.value in channels
+            assert Channel.X.value in channels
+
+    def test_generate_variants_have_body(self, brand, opportunity, mock_package_draft, mock_variant_drafts):
         """All variants have non-empty draft_text."""
-        package_id = uuid4()
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_pkg_graph:
+            mock_pkg_graph.return_value = mock_package_draft
+            package = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
 
-        result = content_engine.generate_variants_for_package(package_id)
+        with patch("kairo.hero.engines.content_engine.graph_hero_variants_from_package") as mock_var_graph:
+            mock_var_graph.return_value = mock_variant_drafts
 
-        for variant in result:
-            assert variant.draft_text, "Variant should have draft_text"
+            result = content_engine.generate_variants_for_package(package.id)
 
-    def test_generate_variants_have_draft_status(self, brand):
+            for variant in result:
+                assert variant.draft_text, "Variant should have draft_text"
+
+    def test_generate_variants_have_draft_status(self, brand, opportunity, mock_package_draft, mock_variant_drafts):
         """All variants start in draft status."""
         from kairo.core.enums import VariantStatus
 
-        package_id = uuid4()
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_pkg_graph:
+            mock_pkg_graph.return_value = mock_package_draft
+            package = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
 
-        result = content_engine.generate_variants_for_package(package_id)
+        with patch("kairo.hero.engines.content_engine.graph_hero_variants_from_package") as mock_var_graph:
+            mock_var_graph.return_value = mock_variant_drafts
 
-        for variant in result:
-            assert variant.status == VariantStatus.DRAFT.value
+            result = content_engine.generate_variants_for_package(package.id)
 
-    def test_generate_variants_not_persisted(self, db, brand):
-        """Variants are not saved to database."""
+            for variant in result:
+                assert variant.status == VariantStatus.DRAFT.value
+
+    def test_generate_variants_persisted(self, db, brand, opportunity, mock_package_draft, mock_variant_drafts):
+        """Variants ARE saved to database (PR-9 change)."""
         from kairo.core.models import Variant
 
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_pkg_graph:
+            mock_pkg_graph.return_value = mock_package_draft
+            package = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
+
         initial_count = Variant.objects.count()
-        package_id = uuid4()
 
-        content_engine.generate_variants_for_package(package_id)
+        with patch("kairo.hero.engines.content_engine.graph_hero_variants_from_package") as mock_var_graph:
+            mock_var_graph.return_value = mock_variant_drafts
 
-        assert Variant.objects.count() == initial_count
+            content_engine.generate_variants_for_package(package.id)
 
-    def test_generate_variants_deterministic(self, brand):
-        """Same package_id produces same variant IDs."""
-        package_id = uuid4()
+            assert Variant.objects.count() == initial_count + 2
 
-        result1 = content_engine.generate_variants_for_package(package_id)
-        result2 = content_engine.generate_variants_for_package(package_id)
+    def test_generate_variants_no_regeneration(self, brand, opportunity, mock_package_draft, mock_variant_drafts):
+        """Second variant generation raises error (no-regeneration rule)."""
+        from kairo.hero.engines.content_engine import VariantsAlreadyExistError
 
-        ids1 = {v.id for v in result1}
-        ids2 = {v.id for v in result2}
-        assert ids1 == ids2
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_pkg_graph:
+            mock_pkg_graph.return_value = mock_package_draft
+            package = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
 
-    def test_package_to_dto_converts_correctly(self, brand):
+        with patch("kairo.hero.engines.content_engine.graph_hero_variants_from_package") as mock_var_graph:
+            mock_var_graph.return_value = mock_variant_drafts
+            content_engine.generate_variants_for_package(package.id)
+
+            # Second call should fail
+            with pytest.raises(VariantsAlreadyExistError):
+                content_engine.generate_variants_for_package(package.id)
+
+    def test_package_to_dto_converts_correctly(self, brand, opportunity, mock_package_draft):
         """package_to_dto converts model to DTO."""
-        opportunity_id = uuid4()
-        package = content_engine.create_package_from_opportunity(brand.id, opportunity_id)
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_graph:
+            mock_graph.return_value = mock_package_draft
 
-        dto = content_engine.package_to_dto(package)
+            package = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
 
-        assert isinstance(dto, ContentPackageDTO)
-        assert dto.id == package.id
-        assert dto.brand_id == package.brand_id
-        assert dto.title == package.title
+            dto = content_engine.package_to_dto(package)
 
-    def test_variant_to_dto_converts_correctly(self, brand):
+            assert isinstance(dto, ContentPackageDTO)
+            assert dto.id == package.id
+            assert dto.brand_id == package.brand_id
+            assert dto.title == package.title
+
+    def test_variant_to_dto_converts_correctly(self, brand, opportunity, mock_package_draft, mock_variant_drafts):
         """variant_to_dto converts model to DTO."""
-        package_id = uuid4()
-        variants = content_engine.generate_variants_for_package(package_id)
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_pkg_graph:
+            mock_pkg_graph.return_value = mock_package_draft
+            package = content_engine.create_package_from_opportunity(brand.id, opportunity.id)
 
-        dto = content_engine.variant_to_dto(variants[0])
+        with patch("kairo.hero.engines.content_engine.graph_hero_variants_from_package") as mock_var_graph:
+            mock_var_graph.return_value = mock_variant_drafts
+            variants = content_engine.generate_variants_for_package(package.id)
 
-        assert isinstance(dto, VariantDTO)
-        assert dto.id == variants[0].id
-        assert dto.package_id == variants[0].package_id
+            dto = content_engine.variant_to_dto(variants[0])
+
+            assert isinstance(dto, VariantDTO)
+            assert dto.id == variants[0].id
+            assert dto.package_id == variants[0].package_id
 
 
 # =============================================================================

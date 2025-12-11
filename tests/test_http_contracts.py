@@ -1,5 +1,5 @@
 """
-HTTP contract tests for PR-2 / PR-3.
+HTTP contract tests for PR-2 / PR-3 (updated for PR-9).
 
 Tests verify:
 - All hero loop endpoints exist at the correct paths
@@ -9,9 +9,13 @@ Tests verify:
 
 PR-3 update: Today board endpoints now require a real Brand in the database
 since the opportunities_engine looks up the brand.
+
+PR-9 update: Package and variant creation tests now mock the graph functions
+to avoid real LLM calls.
 """
 
 import json
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -27,12 +31,14 @@ from kairo.core.enums import (
 from kairo.core.models import Brand, ContentPackage, Opportunity, Tenant, Variant
 from kairo.hero.dto import (
     ContentPackageDTO,
+    ContentPackageDraftDTO,
     CreatePackageResponseDTO,
     DecisionResponseDTO,
     GenerateVariantsResponseDTO,
     RegenerateResponseDTO,
     TodayBoardDTO,
     VariantDTO,
+    VariantDraftDTO,
     VariantListDTO,
 )
 
@@ -129,6 +135,48 @@ def variant(db, brand, package):
 def sample_variant_id(variant) -> str:
     """A sample variant ID for testing (from real variant)."""
     return str(variant.id)
+
+
+@pytest.fixture
+def mock_package_draft():
+    """Mock package draft for HTTP contract testing."""
+    return ContentPackageDraftDTO(
+        title="HTTP Contract Test Package",
+        thesis="A comprehensive test thesis about marketing strategies and best practices for testing.",
+        summary="This package covers various marketing topics with practical examples.",
+        primary_channel=Channel.LINKEDIN,
+        channels=[Channel.LINKEDIN, Channel.X],
+        cta="Learn more",
+        is_valid=True,
+        rejection_reasons=[],
+        package_score=12.0,
+        quality_band="board_ready",
+    )
+
+
+@pytest.fixture
+def mock_variant_drafts():
+    """Mock variant drafts for HTTP contract testing."""
+    return [
+        VariantDraftDTO(
+            channel=Channel.LINKEDIN,
+            body="Test content for LinkedIn with multiple paragraphs and insights for HTTP contract testing.",
+            call_to_action="Share your thoughts",
+            is_valid=True,
+            rejection_reasons=[],
+            variant_score=10.0,
+            quality_band="publish_ready",
+        ),
+        VariantDraftDTO(
+            channel=Channel.X,
+            body="Concise X post about marketing strategies. Thread below.",
+            call_to_action="Follow for more",
+            is_valid=True,
+            rejection_reasons=[],
+            variant_score=9.0,
+            quality_band="publish_ready",
+        ),
+    ]
 
 
 # =============================================================================
@@ -233,29 +281,35 @@ class TestPackageEndpoints:
     """Tests for package endpoints."""
 
     def test_create_package_returns_201(
-        self, client: Client, sample_brand_id: str, sample_opportunity_id: str
+        self, client: Client, sample_brand_id: str, sample_opportunity_id: str, mock_package_draft
     ):
         """POST /api/brands/{brand_id}/opportunities/{opp_id}/packages returns 201."""
-        response = client.post(
-            f"/api/brands/{sample_brand_id}/opportunities/{sample_opportunity_id}/packages/"
-        )
-        assert response.status_code == 201
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_graph:
+            mock_graph.return_value = mock_package_draft
+
+            response = client.post(
+                f"/api/brands/{sample_brand_id}/opportunities/{sample_opportunity_id}/packages/"
+            )
+            assert response.status_code == 201
 
     def test_create_package_validates_against_dto(
-        self, client: Client, sample_brand_id: str, sample_opportunity_id: str
+        self, client: Client, sample_brand_id: str, sample_opportunity_id: str, mock_package_draft
     ):
         """POST create package response validates against CreatePackageResponseDTO."""
-        response = client.post(
-            f"/api/brands/{sample_brand_id}/opportunities/{sample_opportunity_id}/packages/"
-        )
-        data = response.json()
+        with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_graph:
+            mock_graph.return_value = mock_package_draft
 
-        # This should not raise
-        dto = CreatePackageResponseDTO.model_validate(data)
+            response = client.post(
+                f"/api/brands/{sample_brand_id}/opportunities/{sample_opportunity_id}/packages/"
+            )
+            data = response.json()
 
-        assert dto.status == "created"
-        assert dto.package is not None
-        assert str(dto.package.brand_id) == sample_brand_id
+            # This should not raise
+            dto = CreatePackageResponseDTO.model_validate(data)
+
+            assert dto.status == "created"
+            assert dto.package is not None
+            assert str(dto.package.brand_id) == sample_brand_id
 
     def test_get_package_returns_200(self, client: Client, sample_package_id: str):
         """GET /api/packages/{package_id} returns 200."""
@@ -293,23 +347,29 @@ class TestPackageEndpoints:
 class TestVariantEndpoints:
     """Tests for variant endpoints."""
 
-    def test_generate_variants_returns_201(self, client: Client, sample_package_id: str):
+    def test_generate_variants_returns_201(self, client: Client, sample_package_id: str, mock_variant_drafts):
         """POST /api/packages/{package_id}/variants/generate returns 201."""
-        response = client.post(f"/api/packages/{sample_package_id}/variants/generate/")
-        assert response.status_code == 201
+        with patch("kairo.hero.engines.content_engine.graph_hero_variants_from_package") as mock_graph:
+            mock_graph.return_value = mock_variant_drafts
 
-    def test_generate_variants_validates_against_dto(self, client: Client, sample_package_id: str):
+            response = client.post(f"/api/packages/{sample_package_id}/variants/generate/")
+            assert response.status_code == 201
+
+    def test_generate_variants_validates_against_dto(self, client: Client, sample_package_id: str, mock_variant_drafts):
         """POST generate variants response validates against GenerateVariantsResponseDTO."""
-        response = client.post(f"/api/packages/{sample_package_id}/variants/generate/")
-        data = response.json()
+        with patch("kairo.hero.engines.content_engine.graph_hero_variants_from_package") as mock_graph:
+            mock_graph.return_value = mock_variant_drafts
 
-        # This should not raise
-        dto = GenerateVariantsResponseDTO.model_validate(data)
+            response = client.post(f"/api/packages/{sample_package_id}/variants/generate/")
+            data = response.json()
 
-        assert dto.status == "generated"
-        assert str(dto.package_id) == sample_package_id
-        assert len(dto.variants) > 0
-        assert dto.count == len(dto.variants)
+            # This should not raise
+            dto = GenerateVariantsResponseDTO.model_validate(data)
+
+            assert dto.status == "generated"
+            assert str(dto.package_id) == sample_package_id
+            assert len(dto.variants) > 0
+            assert dto.count == len(dto.variants)
 
     def test_get_variants_returns_200(self, client: Client, sample_package_id: str):
         """GET /api/packages/{package_id}/variants returns 200."""
