@@ -36,6 +36,7 @@ class TestDjangoSetup:
         """Django settings should be loaded."""
         from django.conf import settings
         assert settings.configured
+        assert "kairo.core" in settings.INSTALLED_APPS
         assert "kairo.hero" in settings.INSTALLED_APPS
 
     def test_database_configured(self):
