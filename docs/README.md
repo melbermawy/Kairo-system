@@ -27,7 +27,19 @@ Code is expected to follow these docs.
         learning-engine.md
 
       prd/
-        kairo-v1-prd.md
+        kairo-v1-prd.md        # Main PRD for v1 hero loop
+        PR-map-and-standards   # PR roadmap + quality standards
+        prd-map.md             # Index of all PRDs
+        evalHarness.md         # Offline eval harness spec
+
+      technical/
+        00-principles-and-anti-goals.md
+        01-system-architecture.md
+        02-canonical-objects.md
+        03-engines-overview.md
+        04-orchestrator-and-flows.md
+        05-llm-and-deepagents-conventions.md
+        06-content-engine-deep-agent-spec.md
 
 High-level intent:
 
@@ -46,8 +58,14 @@ High-level intent:
 - `engines/*.md`  
   Deep specs for each engine (Brand Brain, Opportunities, Patterns, Content Engineering, Learning).
 
-- `prd/kairo-v1-prd.md`  
+- `prd/kairo-v1-prd.md`
   Product requirements for Kairo v1, including phase plan and key flows.
+
+- `prd/PR-map-and-standards`
+  PR roadmap for implementing PRD-1 + per-PR quality standards.
+
+- `technical/*.md`
+  Technical architecture docs: principles, system architecture, canonical objects, engines, flows, and deepagents conventions.
 
 ---
 
