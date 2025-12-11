@@ -154,6 +154,12 @@ class OpportunityDraftDTO(BaseModel):
 
     Internal use for graph → engine communication.
     No DB IDs, includes raw reasoning from LLM.
+
+    Per 08-opportunity-rubric.md §4.7:
+    - is_valid: bool - whether this opp passes hard requirements
+    - rejection_reasons: list[str] - why it failed (empty if valid)
+
+    Engine must filter out is_valid=False opps before returning the board.
     """
     proposed_title: str
     proposed_angle: str
@@ -167,6 +173,11 @@ class OpportunityDraftDTO(BaseModel):
     persona_hint: str | None = None  # Name/role hint, resolved to ID by engine
     pillar_hint: str | None = None   # Name hint, resolved to ID by engine
     raw_reasoning: str | None = None
+    # Per rubric §4.7: validity tracking
+    is_valid: bool = True  # False if fails hard requirements (§4.1-4.6)
+    rejection_reasons: list[str] = Field(default_factory=list)  # Why it failed
+    # Per rubric §3.3: thesis and why_now (angle serves as thesis for now)
+    why_now: str | None = None  # Timing justification - expected for valid opps
 
 
 # =============================================================================
@@ -399,11 +410,18 @@ class TodayBoardMetaDTO(BaseModel):
     """
     Metadata for Today board generation.
 
-    Per PRD-1 §3.3.6.
+    Per PRD-1 §3.3.6 and hero-loop-eval.md.
+
+    Fields:
+    - degraded: True if board is fallback/incomplete (graph error, etc.)
+    - total_candidates: Count of raw candidates from graph before filtering
+    - reason: Short code/description if degraded (e.g. "graph_error")
     """
     generated_at: datetime
     source: str = "hero_f1"  # Flow identifier
     degraded: bool = False   # True if board is stale/incomplete
+    total_candidates: int | None = None  # Raw count from graph before filtering
+    reason: str | None = None  # Degraded reason code if applicable
     notes: list[str] = Field(default_factory=list)
     opportunity_count: int = 0
     dominant_pillar: str | None = None

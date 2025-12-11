@@ -810,3 +810,76 @@ class TestBrandScoping:
             assert brand_field.related_model == Brand, (
                 f"{model.__name__}.brand should be FK to Brand"
             )
+
+
+# =============================================================================
+# DTO-ONLY FIELD CONTRACT TESTS (PR-8b)
+# =============================================================================
+
+
+@pytest.mark.django_db
+class TestDtoOnlyFieldsContract:
+    """
+    Tests enforcing that is_valid/rejection_reasons/why_now are DTO-only.
+
+    Per PR-8b and 02-canonical-objects.md:
+    - Opportunity model does NOT have is_valid, rejection_reasons, why_now fields
+    - OpportunityDraftDTO DOES have these fields (for eval/filtering)
+    - Engine filters out invalid opps, then persists only valid ones
+    - DB never sees is_valid/rejection_reasons - they're eval-facing only
+    """
+
+    def test_opportunity_model_has_no_is_valid_field(self):
+        """Opportunity model does NOT have is_valid field (DTO-only)."""
+        field_names = [f.name for f in Opportunity._meta.get_fields()]
+        assert "is_valid" not in field_names, (
+            "is_valid should be DTO-only, not persisted on Opportunity model"
+        )
+
+    def test_opportunity_model_has_no_rejection_reasons_field(self):
+        """Opportunity model does NOT have rejection_reasons field (DTO-only)."""
+        field_names = [f.name for f in Opportunity._meta.get_fields()]
+        assert "rejection_reasons" not in field_names, (
+            "rejection_reasons should be DTO-only, not persisted"
+        )
+
+    def test_opportunity_model_has_no_why_now_field(self):
+        """Opportunity model does NOT have why_now field per 02-canonical-objects.md.
+
+        The canonical doc uses 'angle' for 'why now / core argument' per §8.2.
+        """
+        field_names = [f.name for f in Opportunity._meta.get_fields()]
+        assert "why_now" not in field_names, (
+            "why_now should be DTO-only per canonical objects doc"
+        )
+
+    def test_opportunity_draft_dto_has_validity_fields(self):
+        """OpportunityDraftDTO has is_valid, rejection_reasons, why_now fields."""
+        from kairo.hero.dto import OpportunityDraftDTO
+
+        # Check model_fields (Pydantic v2)
+        field_names = list(OpportunityDraftDTO.model_fields.keys())
+        assert "is_valid" in field_names, (
+            "OpportunityDraftDTO must have is_valid field"
+        )
+        assert "rejection_reasons" in field_names, (
+            "OpportunityDraftDTO must have rejection_reasons field"
+        )
+        assert "why_now" in field_names, (
+            "OpportunityDraftDTO must have why_now field"
+        )
+
+    def test_opportunity_dto_does_not_expose_validity_fields(self):
+        """OpportunityDTO (API response) does NOT expose validity fields.
+
+        Validity is internal - API consumers see persisted opportunities only.
+        """
+        from kairo.hero.dto import OpportunityDTO
+
+        field_names = list(OpportunityDTO.model_fields.keys())
+        assert "is_valid" not in field_names, (
+            "OpportunityDTO should not expose is_valid"
+        )
+        assert "rejection_reasons" not in field_names, (
+            "OpportunityDTO should not expose rejection_reasons"
+        )

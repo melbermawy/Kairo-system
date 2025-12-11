@@ -1,13 +1,17 @@
 """
-Engine stub behavior tests for PR-3.
+Engine stub behavior tests for PR-3 (updated for PR-8).
 
 Tests verify:
 - Engines return deterministic stub data
 - DTOs validate correctly
 - Invariants hold (scores in [0,100], channels in expected set, etc.)
+
+Note: PR-8 changed opportunities_engine to call a graph, so these tests
+now patch the graph to return mock data consistent with the stub behavior.
 """
 
 from datetime import datetime, timezone
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -17,6 +21,7 @@ from kairo.core.models import Brand, Tenant
 from kairo.hero.dto import (
     ContentPackageDTO,
     LearningSummaryDTO,
+    OpportunityDraftDTO,
     TodayBoardDTO,
     VariantDTO,
 )
@@ -43,10 +48,125 @@ def brand(db, tenant):
     return Brand.objects.create(
         tenant=tenant,
         name="Test Brand",
+        slug="test-brand",
         positioning="A test brand for unit tests",
         tone_tags=["professional", "friendly"],
         taboos=["competitor mentions"],
     )
+
+
+@pytest.fixture
+def mock_opportunity_drafts():
+    """Mock opportunity drafts that simulate PR-3 stub behavior.
+
+    Updated for PR-8: includes is_valid, rejection_reasons, why_now per rubric §4.7.
+    """
+    return [
+        OpportunityDraftDTO(
+            proposed_title="Industry trend: AI adoption in Test Brand's sector",
+            proposed_angle="Rising discussion about AI tools - opportunity to share our perspective on practical implementation.",
+            type=OpportunityType.TREND,
+            primary_channel=Channel.LINKEDIN,
+            suggested_channels=[Channel.LINKEDIN, Channel.X],
+            score=92.0,
+            score_explanation="PR-3 stub score - real scoring comes in PR-8",
+            source="stub_engine",
+            is_valid=True,
+            rejection_reasons=[],
+            why_now="AI tools are trending this week due to major announcements.",
+        ),
+        OpportunityDraftDTO(
+            proposed_title="Weekly thought leadership post",
+            proposed_angle="Regular cadence content about our core expertise area.",
+            type=OpportunityType.EVERGREEN,
+            primary_channel=Channel.LINKEDIN,
+            suggested_channels=[Channel.LINKEDIN, Channel.X],
+            score=85.0,
+            score_explanation="PR-3 stub score - real scoring comes in PR-8",
+            source="stub_engine",
+            is_valid=True,
+            rejection_reasons=[],
+            why_now="Founders consistently ask about this topic; recurring value.",
+        ),
+        OpportunityDraftDTO(
+            proposed_title="Competitor announcement response",
+            proposed_angle="Competitor just announced a feature - opportunity to differentiate our approach.",
+            type=OpportunityType.COMPETITIVE,
+            primary_channel=Channel.X,
+            suggested_channels=[Channel.LINKEDIN, Channel.X],
+            score=78.0,
+            score_explanation="PR-3 stub score - real scoring comes in PR-8",
+            source="stub_engine",
+            is_valid=True,
+            rejection_reasons=[],
+            why_now="Competitor launched new feature yesterday; timely response opportunity.",
+        ),
+        OpportunityDraftDTO(
+            proposed_title="Customer success story",
+            proposed_angle="Recent customer achieved notable results - great case study material.",
+            type=OpportunityType.EVERGREEN,
+            primary_channel=Channel.LINKEDIN,
+            suggested_channels=[Channel.LINKEDIN, Channel.X],
+            score=88.0,
+            score_explanation="PR-3 stub score - real scoring comes in PR-8",
+            source="stub_engine",
+            is_valid=True,
+            rejection_reasons=[],
+            why_now="Customer just hit 10M milestone; fresh data for case study.",
+        ),
+        OpportunityDraftDTO(
+            proposed_title="Industry report commentary",
+            proposed_angle="New industry report released - can provide contrarian take aligned with our positioning.",
+            type=OpportunityType.TREND,
+            primary_channel=Channel.X,
+            suggested_channels=[Channel.LINKEDIN, Channel.X],
+            score=75.0,
+            score_explanation="PR-3 stub score - real scoring comes in PR-8",
+            source="stub_engine",
+            is_valid=True,
+            rejection_reasons=[],
+            why_now="Gartner released annual report this week; high visibility window.",
+        ),
+        OpportunityDraftDTO(
+            proposed_title="Behind the scenes: Product development",
+            proposed_angle="Authenticity content showing how we build - builds trust with audience.",
+            type=OpportunityType.EVERGREEN,
+            primary_channel=Channel.LINKEDIN,
+            suggested_channels=[Channel.LINKEDIN, Channel.X],
+            score=70.0,
+            score_explanation="PR-3 stub score - real scoring comes in PR-8",
+            source="stub_engine",
+            is_valid=True,
+            rejection_reasons=[],
+            why_now="Team shipped major feature; great behind-the-scenes material.",
+        ),
+        OpportunityDraftDTO(
+            proposed_title="Quick tip thread",
+            proposed_angle="Tactical advice thread format works well for engagement.",
+            type=OpportunityType.EVERGREEN,
+            primary_channel=Channel.X,
+            suggested_channels=[Channel.X],
+            score=82.0,
+            score_explanation="PR-3 stub score - real scoring comes in PR-8",
+            source="stub_engine",
+            is_valid=True,
+            rejection_reasons=[],
+            why_now="Thread format is performing well on X this quarter; proven format.",
+        ),
+        OpportunityDraftDTO(
+            proposed_title="Event follow-up content",
+            proposed_angle="Upcoming industry event - opportunity to share insights and connect.",
+            type=OpportunityType.CAMPAIGN,
+            primary_channel=Channel.LINKEDIN,
+            suggested_channels=[Channel.LINKEDIN, Channel.X],
+            score=65.0,
+            score_explanation="PR-3 stub score - real scoring comes in PR-8",
+            source="stub_engine",
+            is_valid=True,
+            rejection_reasons=[],
+            why_now="Industry conference next week; pre-event visibility opportunity.",
+        ),
+    ]
 
 
 # =============================================================================
@@ -56,97 +176,166 @@ def brand(db, tenant):
 
 @pytest.mark.django_db
 class TestOpportunitiesEngine:
-    """Tests for opportunities_engine.generate_today_board."""
+    """Tests for opportunities_engine.generate_today_board.
 
-    def test_returns_today_board_dto(self, brand):
+    PR-8 update: These tests now patch the graph to return mock data,
+    since the engine now calls the graph instead of generating stubs inline.
+    """
+
+    def test_returns_today_board_dto(self, brand, mock_opportunity_drafts):
         """Engine returns a valid TodayBoardDTO."""
-        result = opportunities_engine.generate_today_board(brand.id)
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.return_value = mock_opportunity_drafts
 
-        assert isinstance(result, TodayBoardDTO)
-        # Validate through model_validate (should not raise)
-        TodayBoardDTO.model_validate(result.model_dump())
+            result = opportunities_engine.generate_today_board(brand.id)
 
-    def test_brand_id_matches(self, brand):
+            assert isinstance(result, TodayBoardDTO)
+            # Validate through model_validate (should not raise)
+            TodayBoardDTO.model_validate(result.model_dump())
+
+    def test_brand_id_matches(self, brand, mock_opportunity_drafts):
         """Returned board has correct brand_id."""
-        result = opportunities_engine.generate_today_board(brand.id)
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.return_value = mock_opportunity_drafts
 
-        assert result.brand_id == brand.id
+            result = opportunities_engine.generate_today_board(brand.id)
 
-    def test_snapshot_has_brand_data(self, brand):
+            assert result.brand_id == brand.id
+
+    def test_snapshot_has_brand_data(self, brand, mock_opportunity_drafts):
         """Snapshot contains actual brand data."""
-        result = opportunities_engine.generate_today_board(brand.id)
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.return_value = mock_opportunity_drafts
 
-        assert result.snapshot.brand_id == brand.id
-        assert result.snapshot.brand_name == brand.name
-        assert result.snapshot.positioning == brand.positioning
-        assert result.snapshot.voice_tone_tags == brand.tone_tags
-        assert result.snapshot.taboos == brand.taboos
+            result = opportunities_engine.generate_today_board(brand.id)
 
-    def test_returns_6_to_10_opportunities(self, brand):
+            assert result.snapshot.brand_id == brand.id
+            assert result.snapshot.brand_name == brand.name
+            assert result.snapshot.positioning == brand.positioning
+            assert result.snapshot.voice_tone_tags == brand.tone_tags
+            assert result.snapshot.taboos == brand.taboos
+
+    def test_returns_6_to_10_opportunities(self, brand, mock_opportunity_drafts):
         """Board has 6-10 opportunities per PR-3 spec."""
-        result = opportunities_engine.generate_today_board(brand.id)
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.return_value = mock_opportunity_drafts
 
-        assert 6 <= len(result.opportunities) <= 10
+            result = opportunities_engine.generate_today_board(brand.id)
 
-    def test_opportunity_scores_in_valid_range(self, brand):
+            assert 6 <= len(result.opportunities) <= 10
+
+    def test_opportunity_scores_in_valid_range(self, brand, mock_opportunity_drafts):
         """All opportunity scores are in [0, 100]."""
-        result = opportunities_engine.generate_today_board(brand.id)
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.return_value = mock_opportunity_drafts
 
-        for opp in result.opportunities:
-            assert 0 <= opp.score <= 100, f"Score {opp.score} out of range"
+            result = opportunities_engine.generate_today_board(brand.id)
 
-    def test_opportunity_scores_in_stub_range(self, brand):
+            for opp in result.opportunities:
+                assert 0 <= opp.score <= 100, f"Score {opp.score} out of range"
+
+    def test_opportunity_scores_in_stub_range(self, brand, mock_opportunity_drafts):
         """Stub scores are in [60, 95] range per spec."""
-        result = opportunities_engine.generate_today_board(brand.id)
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.return_value = mock_opportunity_drafts
 
-        for opp in result.opportunities:
-            assert 60 <= opp.score <= 95, f"Score {opp.score} not in stub range"
+            result = opportunities_engine.generate_today_board(brand.id)
 
-    def test_opportunity_channels_valid(self, brand):
+            for opp in result.opportunities:
+                assert 60 <= opp.score <= 95, f"Score {opp.score} not in stub range"
+
+    def test_opportunity_channels_valid(self, brand, mock_opportunity_drafts):
         """All opportunities have valid primary channels."""
-        result = opportunities_engine.generate_today_board(brand.id)
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.return_value = mock_opportunity_drafts
 
-        valid_channels = {Channel.LINKEDIN, Channel.X}
-        for opp in result.opportunities:
-            assert opp.primary_channel in valid_channels, (
-                f"Channel {opp.primary_channel} not in {valid_channels}"
-            )
+            result = opportunities_engine.generate_today_board(brand.id)
 
-    def test_opportunities_sorted_by_score_descending(self, brand):
+            valid_channels = {Channel.LINKEDIN, Channel.X}
+            for opp in result.opportunities:
+                assert opp.primary_channel in valid_channels, (
+                    f"Channel {opp.primary_channel} not in {valid_channels}"
+                )
+
+    def test_opportunities_sorted_by_score_descending(self, brand, mock_opportunity_drafts):
         """Opportunities are sorted by score descending."""
-        result = opportunities_engine.generate_today_board(brand.id)
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.return_value = mock_opportunity_drafts
 
-        scores = [opp.score for opp in result.opportunities]
-        assert scores == sorted(scores, reverse=True)
+            result = opportunities_engine.generate_today_board(brand.id)
 
-    def test_opportunity_types_valid(self, brand):
+            scores = [opp.score for opp in result.opportunities]
+            assert scores == sorted(scores, reverse=True)
+
+    def test_opportunity_types_valid(self, brand, mock_opportunity_drafts):
         """All opportunities have valid types."""
-        result = opportunities_engine.generate_today_board(brand.id)
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.return_value = mock_opportunity_drafts
 
-        for opp in result.opportunities:
-            assert isinstance(opp.type, OpportunityType)
+            result = opportunities_engine.generate_today_board(brand.id)
 
-    def test_meta_has_correct_opportunity_count(self, brand):
+            for opp in result.opportunities:
+                assert isinstance(opp.type, OpportunityType)
+
+    def test_meta_has_correct_opportunity_count(self, brand, mock_opportunity_drafts):
         """Meta opportunity_count matches actual count."""
-        result = opportunities_engine.generate_today_board(brand.id)
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.return_value = mock_opportunity_drafts
 
-        assert result.meta.opportunity_count == len(result.opportunities)
+            result = opportunities_engine.generate_today_board(brand.id)
 
-    def test_meta_has_channel_mix(self, brand):
+            assert result.meta.opportunity_count == len(result.opportunities)
+
+    def test_meta_has_channel_mix(self, brand, mock_opportunity_drafts):
         """Meta has non-empty channel_mix."""
-        result = opportunities_engine.generate_today_board(brand.id)
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.return_value = mock_opportunity_drafts
 
-        assert len(result.meta.channel_mix) > 0
+            result = opportunities_engine.generate_today_board(brand.id)
 
-    def test_meta_source_is_hero_f1(self, brand):
+            assert len(result.meta.channel_mix) > 0
+
+    def test_meta_source_is_hero_f1(self, brand, mock_opportunity_drafts):
         """Meta source is 'hero_f1'."""
-        result = opportunities_engine.generate_today_board(brand.id)
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.return_value = mock_opportunity_drafts
 
-        assert result.meta.source == "hero_f1"
+            result = opportunities_engine.generate_today_board(brand.id)
 
-    def test_meta_degraded_is_false(self, brand):
-        """Meta degraded is False for stub data."""
-        result = opportunities_engine.generate_today_board(brand.id)
+            assert result.meta.source == "hero_f1"
+
+    def test_meta_degraded_is_false(self, brand, mock_opportunity_drafts):
+        """Meta degraded is False for successful generation."""
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.return_value = mock_opportunity_drafts
+
+            result = opportunities_engine.generate_today_board(brand.id)
 
         assert result.meta.degraded is False
 
@@ -157,24 +346,22 @@ class TestOpportunitiesEngine:
         with pytest.raises(Brand.DoesNotExist):
             opportunities_engine.generate_today_board(fake_id)
 
-    def test_at_least_one_pinned_opportunity(self, brand):
-        """At least one opportunity is pinned (stub behavior)."""
-        result = opportunities_engine.generate_today_board(brand.id)
+    def test_deterministic_output(self, brand, mock_opportunity_drafts):
+        """Same brand ID produces consistent output structure (via idempotent IDs)."""
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.return_value = mock_opportunity_drafts
 
-        pinned_count = sum(1 for opp in result.opportunities if opp.is_pinned)
-        assert pinned_count >= 1
+            result1 = opportunities_engine.generate_today_board(brand.id)
+            result2 = opportunities_engine.generate_today_board(brand.id)
 
-    def test_deterministic_output(self, brand):
-        """Same brand ID produces consistent output structure."""
-        result1 = opportunities_engine.generate_today_board(brand.id)
-        result2 = opportunities_engine.generate_today_board(brand.id)
-
-        # Same number of opportunities
-        assert len(result1.opportunities) == len(result2.opportunities)
-        # Same opportunity IDs
-        ids1 = {opp.id for opp in result1.opportunities}
-        ids2 = {opp.id for opp in result2.opportunities}
-        assert ids1 == ids2
+            # Same number of opportunities
+            assert len(result1.opportunities) == len(result2.opportunities)
+            # Same opportunity IDs (deterministic based on brand+title)
+            ids1 = {opp.id for opp in result1.opportunities}
+            ids2 = {opp.id for opp in result2.opportunities}
+            assert ids1 == ids2
 
 
 # =============================================================================
