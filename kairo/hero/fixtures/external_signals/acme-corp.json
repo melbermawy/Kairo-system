@@ -1,0 +1,63 @@
+{
+  "trends": [
+    {
+      "id": "trend-001",
+      "topic": "AI-Powered Customer Service",
+      "source": "linkedin_trending",
+      "relevance_score": 85.0,
+      "recency_days": 2,
+      "url": "https://example.com/ai-customer-service-trends",
+      "snippet": "Companies are increasingly adopting AI chatbots for 24/7 customer support, reducing response times by 60%."
+    },
+    {
+      "id": "trend-002",
+      "topic": "Remote Work Productivity Tools",
+      "source": "google_trends",
+      "relevance_score": 72.5,
+      "recency_days": 5,
+      "url": null,
+      "snippet": "Search interest in remote collaboration tools has surged 40% this quarter."
+    }
+  ],
+  "web_mentions": [
+    {
+      "id": "mention-001",
+      "title": "Top 10 B2B SaaS Companies to Watch in 2024",
+      "source": "TechCrunch",
+      "url": "https://example.com/top-saas-2024",
+      "snippet": "ACME Corp's innovative approach to enterprise solutions has earned them a spot on our list.",
+      "published_at": "2024-01-15T10:30:00Z",
+      "relevance_score": 90.0
+    },
+    {
+      "id": "mention-002",
+      "title": "Enterprise Software Market Analysis",
+      "source": "Forbes",
+      "url": "https://example.com/enterprise-analysis",
+      "snippet": "The enterprise software market continues to grow, with cloud-native solutions leading adoption.",
+      "published_at": "2024-01-10T08:00:00Z",
+      "relevance_score": 65.0
+    }
+  ],
+  "competitor_posts": [
+    {
+      "id": "comp-001",
+      "competitor_name": "TechRival Inc",
+      "channel": "linkedin",
+      "post_url": "https://linkedin.com/posts/techrival/product-launch",
+      "post_snippet": "Excited to announce our new enterprise dashboard feature!",
+      "engagement_hint": "high engagement",
+      "published_at": "2024-01-18T14:00:00Z"
+    }
+  ],
+  "social_moments": [
+    {
+      "id": "moment-001",
+      "description": "Industry conference #SaaSTech2024 trending with key announcements",
+      "channel": "x",
+      "relevance_hint": "B2B SaaS audience highly engaged",
+      "recency_hours": 12,
+      "url": "https://twitter.com/hashtag/SaaSTech2024"
+    }
+  ]
+}

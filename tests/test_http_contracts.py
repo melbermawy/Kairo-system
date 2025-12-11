@@ -17,7 +17,14 @@ from uuid import UUID, uuid4
 import pytest
 from django.test import Client
 
-from kairo.core.models import Brand, Tenant
+from kairo.core.enums import (
+    Channel,
+    CreatedVia,
+    OpportunityType,
+    PackageStatus,
+    VariantStatus,
+)
+from kairo.core.models import Brand, ContentPackage, Opportunity, Tenant, Variant
 from kairo.hero.dto import (
     ContentPackageDTO,
     CreatePackageResponseDTO,
@@ -68,21 +75,60 @@ def sample_brand_id(brand) -> str:
 
 
 @pytest.fixture
-def sample_opportunity_id() -> str:
-    """A sample opportunity ID for testing."""
-    return "cccccccc-cccc-cccc-cccc-000000000000"
+def opportunity(db, brand):
+    """Create a real opportunity for decision tests."""
+    return Opportunity.objects.create(
+        brand=brand,
+        type=OpportunityType.TREND,
+        title="Test Opportunity",
+        angle="Test angle",
+        score=0.75,
+        primary_channel=Channel.LINKEDIN,
+        created_via=CreatedVia.AI_SUGGESTED,
+        metadata={},
+    )
 
 
 @pytest.fixture
-def sample_package_id() -> str:
-    """A sample package ID for testing."""
-    return "dddddddd-dddd-dddd-dddd-dddddddddddd"
+def sample_opportunity_id(opportunity) -> str:
+    """A sample opportunity ID for testing (from real opportunity)."""
+    return str(opportunity.id)
 
 
 @pytest.fixture
-def sample_variant_id() -> str:
-    """A sample variant ID for testing."""
-    return "eeeeeeee-eeee-eeee-eeee-000000000000"
+def package(db, brand, opportunity):
+    """Create a real package for decision tests."""
+    return ContentPackage.objects.create(
+        brand=brand,
+        title="Test Package",
+        status=PackageStatus.DRAFT,
+        origin_opportunity=opportunity,
+        metrics_snapshot={},
+    )
+
+
+@pytest.fixture
+def sample_package_id(package) -> str:
+    """A sample package ID for testing (from real package)."""
+    return str(package.id)
+
+
+@pytest.fixture
+def variant(db, brand, package):
+    """Create a real variant for decision tests."""
+    return Variant.objects.create(
+        brand=brand,
+        package=package,
+        channel=Channel.LINKEDIN,
+        status=VariantStatus.DRAFT,
+        draft_text="Test draft",
+    )
+
+
+@pytest.fixture
+def sample_variant_id(variant) -> str:
+    """A sample variant ID for testing (from real variant)."""
+    return str(variant.id)
 
 
 # =============================================================================

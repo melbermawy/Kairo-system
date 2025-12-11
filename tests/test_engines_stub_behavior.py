@@ -372,15 +372,14 @@ class TestLearningEngine:
         result = learning_engine.summarize_learning_for_brand(brand.id)
 
         assert isinstance(result.top_performing_patterns, list)
-        # Stub has at least 2 patterns
-        assert len(result.top_performing_patterns) >= 2
+        # PR-4: List may be empty if no learning events exist
 
     def test_summarize_learning_has_top_channels(self, brand):
         """Summary has top_performing_channels list."""
         result = learning_engine.summarize_learning_for_brand(brand.id)
 
         assert isinstance(result.top_performing_channels, list)
-        assert len(result.top_performing_channels) >= 1
+        # PR-4: List may be empty if no learning events exist
         for channel in result.top_performing_channels:
             assert isinstance(channel, Channel)
 
@@ -396,7 +395,7 @@ class TestLearningEngine:
         result = learning_engine.summarize_learning_for_brand(brand.id)
 
         assert isinstance(result.pillar_performance, dict)
-        assert len(result.pillar_performance) > 0
+        # PR-4: Dict may be empty if no pillar data exists
         for name, score in result.pillar_performance.items():
             assert isinstance(name, str)
             assert 0 <= score <= 100
@@ -406,7 +405,7 @@ class TestLearningEngine:
         result = learning_engine.summarize_learning_for_brand(brand.id)
 
         assert isinstance(result.persona_engagement, dict)
-        assert len(result.persona_engagement) > 0
+        # PR-4: Dict may be empty if no persona data exists
         for name, score in result.persona_engagement.items():
             assert isinstance(name, str)
             assert 0 <= score <= 100
@@ -418,14 +417,19 @@ class TestLearningEngine:
         assert isinstance(result.notes, list)
         assert len(result.notes) > 0
 
-    def test_process_execution_events_returns_empty_list(self, brand):
-        """process_execution_events returns empty list for PR-3."""
+    def test_process_execution_events_returns_processing_result(self, brand):
+        """process_execution_events returns ProcessingResult for PR-4."""
         result = learning_engine.process_execution_events(brand.id)
 
-        assert result == []
+        # PR-4: Returns a ProcessingResult named tuple
+        assert hasattr(result, "events_processed")
+        assert hasattr(result, "learning_events_created")
+        assert hasattr(result, "learning_events")
 
-    def test_process_execution_events_with_window_size(self, brand):
-        """process_execution_events accepts window_size param."""
-        result = learning_engine.process_execution_events(brand.id, window_size=7)
+    def test_process_execution_events_with_window_hours(self, brand):
+        """process_execution_events accepts window_hours param."""
+        result = learning_engine.process_execution_events(brand.id, window_hours=7)
 
-        assert result == []
+        # PR-4: Returns ProcessingResult even when no events
+        assert result.events_processed == 0
+        assert result.learning_events_created == 0
