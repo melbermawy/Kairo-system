@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     # Third-party
     "corsheaders",
     # Kairo apps
+    "kairo.core",
     "kairo.hero",
     # PRD-1: out of scope for PR-0 - future apps:
     # "kairo.engines.brand_brain",
