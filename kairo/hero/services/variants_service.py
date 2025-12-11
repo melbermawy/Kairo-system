@@ -2,10 +2,11 @@
 Variants Service.
 
 PR-3: Service Layer + Engines Layer Skeleton.
+PR-6: Added RunContext construction + propagation.
 
-Handles variant generation, listing, and updates.
+Handles variant generation, listing, and updates (F2_package flow).
 
-Per PR-map-and-standards §PR-3 4.5.
+Per PR-map-and-standards §PR-3 4.5 and §PR-6.
 """
 
 from datetime import datetime, timezone
@@ -19,23 +20,39 @@ from kairo.hero.dto import (
     VariantListDTO,
 )
 from kairo.hero.engines import content_engine
+from kairo.hero.run_context import RunContext, create_run_context
 
 
-def generate_variants_for_package(package_id: UUID) -> GenerateVariantsResponseDTO:
+def generate_variants_for_package(
+    brand_id: UUID,
+    package_id: UUID,
+    ctx: RunContext | None = None,
+) -> GenerateVariantsResponseDTO:
     """
     Generate content variants for a package.
 
     Calls content_engine.generate_variants_for_package and wraps
     the result in GenerateVariantsResponseDTO.
 
+    PR-6: Constructs RunContext if not provided (for F2_package flow, api trigger).
+
     Args:
+        brand_id: UUID of the brand
         package_id: UUID of the package
+        ctx: Optional RunContext. If None, creates one with trigger_source="api"
 
     Returns:
         GenerateVariantsResponseDTO with generated variants
     """
+    if ctx is None:
+        ctx = create_run_context(
+            brand_id=brand_id,
+            flow="F2_package",
+            trigger_source="api",
+        )
+
     # Call content engine to generate stub variants
-    variants = content_engine.generate_variants_for_package(package_id)
+    variants = content_engine.generate_variants_for_package(ctx, package_id)
 
     # Convert to DTOs
     variant_dtos = [content_engine.variant_to_dto(v) for v in variants]
@@ -48,7 +65,11 @@ def generate_variants_for_package(package_id: UUID) -> GenerateVariantsResponseD
     )
 
 
-def list_variants_for_package(package_id: UUID) -> VariantListDTO:
+def list_variants_for_package(
+    brand_id: UUID,
+    package_id: UUID,
+    ctx: RunContext | None = None,
+) -> VariantListDTO:
     """
     List all variants for a package.
 
@@ -57,14 +78,25 @@ def list_variants_for_package(package_id: UUID) -> VariantListDTO:
     Real implementation (later PRs) will:
     - Query DB for actual variants
 
+    PR-6: Constructs RunContext if not provided (for F2_package flow, api trigger).
+
     Args:
+        brand_id: UUID of the brand
         package_id: UUID of the package
+        ctx: Optional RunContext. If None, creates one with trigger_source="api"
 
     Returns:
         VariantListDTO with stub variants
     """
+    if ctx is None:
+        ctx = create_run_context(
+            brand_id=brand_id,
+            flow="F2_package",
+            trigger_source="api",
+        )
+
     # Use content engine to generate consistent stub variants
-    variants = content_engine.generate_variants_for_package(package_id)
+    variants = content_engine.generate_variants_for_package(ctx, package_id)
     variant_dtos = [content_engine.variant_to_dto(v) for v in variants]
 
     return VariantListDTO(
@@ -85,6 +117,8 @@ def update_variant(variant_id: UUID, payload: dict[str, Any]) -> VariantDTO:
     - Validate variant exists
     - Apply updates to DB
     - Handle workflow transitions
+
+    Note: This does not call an engine function, so no RunContext needed yet.
 
     Args:
         variant_id: UUID of the variant

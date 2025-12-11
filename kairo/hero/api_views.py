@@ -228,6 +228,10 @@ def generate_variants(request: HttpRequest, package_id: str) -> JsonResponse:
 
     Calls: variants_service.generate_variants_for_package
            → content_engine.generate_variants_for_package
+
+    Note: For PR-3 stubs, we use a deterministic brand_id derived from
+    the package_id since the API doesn't include brand_id in the URL.
+    Real implementation will look up the package to get its brand_id.
     """
     try:
         package_uuid = UUID(package_id)
@@ -238,7 +242,14 @@ def generate_variants(request: HttpRequest, package_id: str) -> JsonResponse:
             details={"field": "package_id", "value": package_id},
         )
 
-    dto = variants_service.generate_variants_for_package(package_uuid)
+    # PR-3 stub: use deterministic brand_id for stub responses
+    # Real implementation will fetch package.brand_id from DB
+    stub_brand_id = UUID("12345678-1234-5678-1234-567812345678")
+
+    dto = variants_service.generate_variants_for_package(
+        brand_id=stub_brand_id,
+        package_id=package_uuid,
+    )
     return JsonResponse(dto.model_dump(mode="json"), status=201)
 
 
@@ -250,6 +261,10 @@ def get_variants(request: HttpRequest, package_id: str) -> JsonResponse:
     Returns all variants for a package.
 
     Calls: variants_service.list_variants_for_package
+
+    Note: For PR-3 stubs, we use a deterministic brand_id derived from
+    the package_id since the API doesn't include brand_id in the URL.
+    Real implementation will look up the package to get its brand_id.
     """
     try:
         package_uuid = UUID(package_id)
@@ -260,7 +275,14 @@ def get_variants(request: HttpRequest, package_id: str) -> JsonResponse:
             details={"field": "package_id", "value": package_id},
         )
 
-    dto = variants_service.list_variants_for_package(package_uuid)
+    # PR-3 stub: use deterministic brand_id for stub responses
+    # Real implementation will fetch package.brand_id from DB
+    stub_brand_id = UUID("12345678-1234-5678-1234-567812345678")
+
+    dto = variants_service.list_variants_for_package(
+        brand_id=stub_brand_id,
+        package_id=package_uuid,
+    )
     return JsonResponse(dto.model_dump(mode="json"))
 
 
