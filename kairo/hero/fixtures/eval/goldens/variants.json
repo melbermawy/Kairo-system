@@ -1,0 +1,59 @@
+{
+  "_comment": "Golden variant annotations for eval. golden_variant_id is eval-only, NOT a DB PK.",
+  "goldens": {
+    "eval_brand_revops_saas": [
+      {
+        "golden_variant_id": "golden_var_revops_001_linkedin",
+        "golden_package_id": "golden_pkg_revops_001",
+        "channel": "linkedin",
+        "body": "I've talked to 50+ RevOps leaders this year.\n\nThe pattern is always the same:\n- 15+ tools in the stack\n- 3+ data sources for the same metric\n- Hours spent reconciling numbers before every board meeting\n\nHere's the uncomfortable truth: most of these tools were bought to solve symptoms, not root causes.\n\nThe fix isn't adding another tool. It's ruthless consolidation around your core data flows.\n\n3 questions to start:\n1. Which 3 tools actually touch revenue data?\n2. What's your single source of truth for pipeline?\n3. Who owns data quality (not 'everyone')?\n\nIf you can't answer these clearly, you have a strategy problem, not a tooling problem.\n\nWhat's your experience? Drop a comment.",
+        "labels": {
+          "clarity": 4,
+          "channel_fit": 4,
+          "cta_quality": 3,
+          "taboo_free": true
+        }
+      },
+      {
+        "golden_variant_id": "golden_var_revops_001_x",
+        "golden_package_id": "golden_pkg_revops_001",
+        "channel": "x",
+        "body": "RevOps stack truth bomb:\n\n15+ tools\n3+ data sources per metric\nHours reconciling before board meetings\n\nThe fix: ruthless consolidation, not another integration.\n\nThread on the 3 questions every RevOps leader should answer first:",
+        "labels": {
+          "clarity": 4,
+          "channel_fit": 4,
+          "cta_quality": 3,
+          "taboo_free": true
+        }
+      }
+    ],
+    "eval_brand_devtools": [
+      {
+        "golden_variant_id": "golden_var_dev_001_linkedin",
+        "golden_package_id": "golden_pkg_dev_001",
+        "channel": "linkedin",
+        "body": "Your PRs are stuck in limbo. Here's why it's not a tooling problem.\n\nAfter working with 30+ engineering teams, I've noticed the same bottleneck pattern:\n\n1. Unclear ownership - PRs assigned to 'the team' mean nobody reviews them\n2. No response time expectations - is 4 hours fast or slow?\n3. Review depth varies wildly - some get 50 comments, others get LGTM\n\nThe fix is cultural, not technical:\n\n- Assign primary reviewers explicitly\n- Set response time SLAs (we use 4 business hours)\n- Define what 'good enough' review looks like\n\nWhat's blocking your PRs?",
+        "labels": {
+          "clarity": 4,
+          "channel_fit": 4,
+          "cta_quality": 3,
+          "taboo_free": true
+        }
+      }
+    ],
+    "eval_brand_b2c_lifestyle": [
+      {
+        "golden_variant_id": "golden_var_wellness_001_linkedin",
+        "golden_package_id": "golden_pkg_wellness_001",
+        "channel": "linkedin",
+        "body": "I used to think meditation was for people with time.\n\nThen I read the research on micro-meditation.\n\nHere's what the studies actually show:\n\n- 5 minutes of focused breathing reduces cortisol by 14%\n- Effects kick in within 8 weeks of consistent practice\n- Even 3 minutes helps, if done consistently\n\nThe key insight: consistency beats duration.\n\nFor busy executives, here's what works:\n\n1. Same time each day (before first meeting)\n2. Same trigger (sitting down with coffee)\n3. Same duration (start with 3 minutes)\n\nNo apps required. No special setup.\n\nJust your breath and 3 minutes.\n\nWhat's your biggest barrier to starting?",
+        "labels": {
+          "clarity": 4,
+          "channel_fit": 4,
+          "cta_quality": 4,
+          "taboo_free": true
+        }
+      }
+    ]
+  }
+}

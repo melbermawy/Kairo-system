@@ -1,0 +1,44 @@
+{
+  "_comment": "Golden package annotations for eval. golden_package_id is eval-only, NOT a DB PK.",
+  "goldens": {
+    "eval_brand_revops_saas": [
+      {
+        "golden_package_id": "golden_pkg_revops_001",
+        "golden_opportunity_id": "golden_opp_revops_001",
+        "thesis": "Most RevOps teams are drowning in tools because they optimized for features, not workflow. The real solution is ruthless consolidation around core data flows.",
+        "channels": ["linkedin", "x"],
+        "labels": {
+          "thesis_clarity": 4,
+          "channel_coherence": 4,
+          "brand_alignment": 4
+        }
+      }
+    ],
+    "eval_brand_devtools": [
+      {
+        "golden_package_id": "golden_pkg_dev_001",
+        "golden_opportunity_id": "golden_opp_dev_001",
+        "thesis": "Code review bottlenecks aren't about tooling - they're about unclear ownership and review culture. Here's how to fix both.",
+        "channels": ["linkedin"],
+        "labels": {
+          "thesis_clarity": 4,
+          "channel_coherence": 3,
+          "brand_alignment": 4
+        }
+      }
+    ],
+    "eval_brand_b2c_lifestyle": [
+      {
+        "golden_package_id": "golden_pkg_wellness_001",
+        "golden_opportunity_id": "golden_opp_wellness_001",
+        "thesis": "The research on micro-meditation is compelling, but most executives get it wrong. Here's the evidence-based approach that actually fits a packed calendar.",
+        "channels": ["linkedin", "newsletter"],
+        "labels": {
+          "thesis_clarity": 4,
+          "channel_coherence": 4,
+          "brand_alignment": 4
+        }
+      }
+    ]
+  }
+}

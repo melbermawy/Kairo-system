@@ -8,11 +8,10 @@ Handles variant generation, listing, and updates.
 Per PR-map-and-standards §PR-3 4.5.
 """
 
-from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from kairo.core.enums import Channel, VariantStatus
+from kairo.core.enums import VariantStatus
 from kairo.hero.dto import (
     GenerateVariantsResponseDTO,
     VariantDTO,
@@ -52,19 +51,18 @@ def list_variants_for_package(package_id: UUID) -> VariantListDTO:
     """
     List all variants for a package.
 
-    For PR-3, returns a deterministic list of 2 stub variants.
-
-    Real implementation (later PRs) will:
-    - Query DB for actual variants
+    Queries DB for existing variants associated with the package.
 
     Args:
         package_id: UUID of the package
 
     Returns:
-        VariantListDTO with stub variants
+        VariantListDTO with existing variants
     """
-    # Use content engine to generate consistent stub variants
-    variants = content_engine.generate_variants_for_package(package_id)
+    from kairo.core.models import Variant
+
+    # Query existing variants for this package
+    variants = Variant.objects.filter(package_id=package_id).order_by("created_at")
     variant_dtos = [content_engine.variant_to_dto(v) for v in variants]
 
     return VariantListDTO(
@@ -78,13 +76,7 @@ def update_variant(variant_id: UUID, payload: dict[str, Any]) -> VariantDTO:
     """
     Update a variant's content or status.
 
-    For PR-3, ignores most payload fields and returns a stub VariantDTO
-    that shows the "updated" variant (echoing back text from payload).
-
-    Real implementation (later PRs) will:
-    - Validate variant exists
-    - Apply updates to DB
-    - Handle workflow transitions
+    Queries the variant from DB, applies updates, and returns DTO.
 
     Args:
         variant_id: UUID of the variant
@@ -93,36 +85,27 @@ def update_variant(variant_id: UUID, payload: dict[str, Any]) -> VariantDTO:
     Returns:
         VariantDTO with updated fields
     """
-    now = datetime.now(timezone.utc)
+    from kairo.core.models import Variant
 
-    # Deterministic stub IDs
-    stub_brand_id = UUID("12345678-1234-5678-1234-567812345678")
-    stub_package_id = UUID("dddddddd-dddd-dddd-dddd-dddddddddddd")
+    # Get the variant from DB
+    variant = Variant.objects.get(id=variant_id)
 
-    # Build stub variant, applying payload updates
-    body = payload.get("body", "Default variant body")
-    call_to_action = payload.get("call_to_action")
-    status = payload.get("status", VariantStatus.DRAFT)
+    # Apply updates from payload
+    if "body" in payload:
+        variant.draft_text = payload["body"]
 
-    # Convert status if it's a string
-    if isinstance(status, str):
-        status = VariantStatus(status)
+    if "call_to_action" in payload:
+        # call_to_action is stored in metadata JSON field
+        if variant.metadata is None:
+            variant.metadata = {}
+        variant.metadata["call_to_action"] = payload["call_to_action"]
 
-    return VariantDTO(
-        id=variant_id,
-        package_id=stub_package_id,
-        brand_id=stub_brand_id,
-        channel=Channel.LINKEDIN,
-        status=status,
-        pattern_template_id=None,
-        body=body,
-        call_to_action=call_to_action,
-        generated_by_model="stub-pr3",
-        proposed_at=now,
-        scheduled_publish_at=None,
-        published_at=None,
-        eval_score=None,
-        eval_notes=None,
-        created_at=now,
-        updated_at=now,
-    )
+    if "status" in payload:
+        status = payload["status"]
+        if isinstance(status, str):
+            status = VariantStatus(status)
+        variant.status = status
+
+    variant.save()
+
+    return content_engine.variant_to_dto(variant)

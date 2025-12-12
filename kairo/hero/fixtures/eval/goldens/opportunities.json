@@ -1,0 +1,67 @@
+{
+  "_comment": "Golden opportunity annotations for eval. golden_opp_id is eval-only, NOT a DB PK.",
+  "goldens": {
+    "eval_brand_revops_saas": [
+      {
+        "golden_opp_id": "golden_opp_revops_001",
+        "title": "Why RevOps teams are drowning in 15+ tools (and what to do about it)",
+        "pillar_hint": "RevOps Efficiency",
+        "persona_hint": "RevOps Leader",
+        "channel": "linkedin",
+        "importance": "high",
+        "expected_type": "trend",
+        "labels": {
+          "clarity": 4,
+          "strategic_fit": 4,
+          "timeliness": 4
+        }
+      },
+      {
+        "golden_opp_id": "golden_opp_revops_002",
+        "title": "The hidden cost of bad CRM data: a RevOps confession",
+        "pillar_hint": "Data Quality",
+        "persona_hint": "Sales Ops Manager",
+        "channel": "linkedin",
+        "importance": "medium",
+        "expected_type": "evergreen",
+        "labels": {
+          "clarity": 4,
+          "strategic_fit": 3,
+          "timeliness": 3
+        }
+      }
+    ],
+    "eval_brand_devtools": [
+      {
+        "golden_opp_id": "golden_opp_dev_001",
+        "title": "Code review bottlenecks: why your PRs are stuck in limbo",
+        "pillar_hint": "Developer Productivity",
+        "persona_hint": "Engineering Lead",
+        "channel": "linkedin",
+        "importance": "high",
+        "expected_type": "evergreen",
+        "labels": {
+          "clarity": 4,
+          "strategic_fit": 4,
+          "timeliness": 3
+        }
+      }
+    ],
+    "eval_brand_b2c_lifestyle": [
+      {
+        "golden_opp_id": "golden_opp_wellness_001",
+        "title": "5-minute meditation for executives: what the research actually says",
+        "pillar_hint": "Stress Management",
+        "persona_hint": "Busy Executive",
+        "channel": "linkedin",
+        "importance": "high",
+        "expected_type": "trend",
+        "labels": {
+          "clarity": 4,
+          "strategic_fit": 4,
+          "timeliness": 4
+        }
+      }
+    ]
+  }
+}

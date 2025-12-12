@@ -31,6 +31,7 @@ from .services import (
     today_service,
     variants_service,
 )
+from .services.decisions_service import ObjectNotFoundError
 
 
 # =============================================================================
@@ -354,9 +355,18 @@ def record_opportunity_decision(request: HttpRequest, opportunity_id: str) -> Js
     # Stub brand_id for now (real implementation would extract from context)
     stub_brand_id = UUID("12345678-1234-5678-1234-567812345678")
 
-    dto = decisions_service.record_opportunity_decision(
-        stub_brand_id, opportunity_uuid, decision_request
-    )
+    try:
+        dto = decisions_service.record_opportunity_decision(
+            stub_brand_id, opportunity_uuid, decision_request
+        )
+    except ObjectNotFoundError:
+        return error_response(
+            code="not_found",
+            message="Opportunity not found",
+            status=404,
+            details={"opportunity_id": opportunity_id},
+        )
+
     return JsonResponse(dto.model_dump(mode="json"))
 
 
@@ -398,9 +408,18 @@ def record_package_decision(request: HttpRequest, package_id: str) -> JsonRespon
     # Stub brand_id for now (real implementation would extract from context)
     stub_brand_id = UUID("12345678-1234-5678-1234-567812345678")
 
-    dto = decisions_service.record_package_decision(
-        stub_brand_id, package_uuid, decision_request
-    )
+    try:
+        dto = decisions_service.record_package_decision(
+            stub_brand_id, package_uuid, decision_request
+        )
+    except ObjectNotFoundError:
+        return error_response(
+            code="not_found",
+            message="Package not found",
+            status=404,
+            details={"package_id": package_id},
+        )
+
     return JsonResponse(dto.model_dump(mode="json"))
 
 
@@ -442,7 +461,16 @@ def record_variant_decision(request: HttpRequest, variant_id: str) -> JsonRespon
     # Stub brand_id for now (real implementation would extract from context)
     stub_brand_id = UUID("12345678-1234-5678-1234-567812345678")
 
-    dto = decisions_service.record_variant_decision(
-        stub_brand_id, variant_uuid, decision_request
-    )
+    try:
+        dto = decisions_service.record_variant_decision(
+            stub_brand_id, variant_uuid, decision_request
+        )
+    except ObjectNotFoundError:
+        return error_response(
+            code="not_found",
+            message="Variant not found",
+            status=404,
+            details={"variant_id": variant_id},
+        )
+
     return JsonResponse(dto.model_dump(mode="json"))

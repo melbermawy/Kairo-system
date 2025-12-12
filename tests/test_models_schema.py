@@ -810,3 +810,258 @@ class TestBrandScoping:
             assert brand_field.related_model == Brand, (
                 f"{model.__name__}.brand should be FK to Brand"
             )
+
+
+# =============================================================================
+# DTO-ONLY FIELD CONTRACT TESTS (PR-8b)
+# =============================================================================
+
+
+@pytest.mark.django_db
+class TestDtoOnlyFieldsContract:
+    """
+    Tests enforcing that is_valid/rejection_reasons/why_now are DTO-only.
+
+    Per PR-8b and 02-canonical-objects.md:
+    - Opportunity model does NOT have is_valid, rejection_reasons, why_now fields
+    - OpportunityDraftDTO DOES have these fields (for eval/filtering)
+    - Engine filters out invalid opps, then persists only valid ones
+    - DB never sees is_valid/rejection_reasons - they're eval-facing only
+    """
+
+    def test_opportunity_model_has_no_is_valid_field(self):
+        """Opportunity model does NOT have is_valid field (DTO-only)."""
+        field_names = [f.name for f in Opportunity._meta.get_fields()]
+        assert "is_valid" not in field_names, (
+            "is_valid should be DTO-only, not persisted on Opportunity model"
+        )
+
+    def test_opportunity_model_has_no_rejection_reasons_field(self):
+        """Opportunity model does NOT have rejection_reasons field (DTO-only)."""
+        field_names = [f.name for f in Opportunity._meta.get_fields()]
+        assert "rejection_reasons" not in field_names, (
+            "rejection_reasons should be DTO-only, not persisted"
+        )
+
+    def test_opportunity_model_has_no_why_now_field(self):
+        """Opportunity model does NOT have why_now field per 02-canonical-objects.md.
+
+        The canonical doc uses 'angle' for 'why now / core argument' per §8.2.
+        """
+        field_names = [f.name for f in Opportunity._meta.get_fields()]
+        assert "why_now" not in field_names, (
+            "why_now should be DTO-only per canonical objects doc"
+        )
+
+    def test_opportunity_draft_dto_has_validity_fields(self):
+        """OpportunityDraftDTO has is_valid, rejection_reasons, why_now fields."""
+        from kairo.hero.dto import OpportunityDraftDTO
+
+        # Check model_fields (Pydantic v2)
+        field_names = list(OpportunityDraftDTO.model_fields.keys())
+        assert "is_valid" in field_names, (
+            "OpportunityDraftDTO must have is_valid field"
+        )
+        assert "rejection_reasons" in field_names, (
+            "OpportunityDraftDTO must have rejection_reasons field"
+        )
+        assert "why_now" in field_names, (
+            "OpportunityDraftDTO must have why_now field"
+        )
+
+    def test_opportunity_dto_does_not_expose_validity_fields(self):
+        """OpportunityDTO (API response) does NOT expose validity fields.
+
+        Validity is internal - API consumers see persisted opportunities only.
+        """
+        from kairo.hero.dto import OpportunityDTO
+
+        field_names = list(OpportunityDTO.model_fields.keys())
+        assert "is_valid" not in field_names, (
+            "OpportunityDTO should not expose is_valid"
+        )
+        assert "rejection_reasons" not in field_names, (
+            "OpportunityDTO should not expose rejection_reasons"
+        )
+
+
+# =============================================================================
+# PR-9: CONTENT PACKAGE / VARIANT DTO-ONLY FIELD CONTRACT TESTS
+# =============================================================================
+
+
+@pytest.mark.django_db
+class TestPackageVariantDtoOnlyFieldsContract:
+    """
+    Tests enforcing that PR-9 rubric fields are DTO-only per 09/10-*-rubric.md.
+
+    Per PR-9 and rubrics §10:
+    - ContentPackage model does NOT have is_valid, package_score, quality_band
+    - Variant model does NOT have is_valid, variant_score, quality_band
+    - Draft DTOs HAVE these fields for eval/filtering
+    - Engine filters invalid items, persists only valid ones
+    - DB never sees these fields - they're eval-facing only
+    """
+
+    # ContentPackage model tests
+    def test_content_package_model_has_no_is_valid_field(self):
+        """ContentPackage model does NOT have is_valid field (DTO-only)."""
+        field_names = [f.name for f in ContentPackage._meta.get_fields()]
+        assert "is_valid" not in field_names, (
+            "is_valid should be DTO-only, not persisted on ContentPackage model"
+        )
+
+    def test_content_package_model_has_no_package_score_field(self):
+        """ContentPackage model does NOT have package_score field (DTO-only)."""
+        field_names = [f.name for f in ContentPackage._meta.get_fields()]
+        assert "package_score" not in field_names, (
+            "package_score should be DTO-only per rubric §10"
+        )
+
+    def test_content_package_model_has_no_quality_band_field(self):
+        """ContentPackage model does NOT have quality_band field (DTO-only)."""
+        field_names = [f.name for f in ContentPackage._meta.get_fields()]
+        assert "quality_band" not in field_names, (
+            "quality_band should be DTO-only per rubric §10"
+        )
+
+    def test_content_package_model_has_no_rejection_reasons_field(self):
+        """ContentPackage model does NOT have rejection_reasons field (DTO-only)."""
+        field_names = [f.name for f in ContentPackage._meta.get_fields()]
+        assert "rejection_reasons" not in field_names, (
+            "rejection_reasons should be DTO-only per rubric §10"
+        )
+
+    def test_content_package_model_has_no_thesis_field(self):
+        """ContentPackage model does NOT have thesis field.
+
+        Per 09-package-rubric.md §10: thesis is stored in notes field for PRD-1.
+        """
+        field_names = [f.name for f in ContentPackage._meta.get_fields()]
+        assert "thesis" not in field_names, (
+            "thesis should be stored in notes field for PRD-1, not separate column"
+        )
+
+    # Variant model tests
+    def test_variant_model_has_no_is_valid_field(self):
+        """Variant model does NOT have is_valid field (DTO-only)."""
+        field_names = [f.name for f in Variant._meta.get_fields()]
+        assert "is_valid" not in field_names, (
+            "is_valid should be DTO-only, not persisted on Variant model"
+        )
+
+    def test_variant_model_has_no_variant_score_field(self):
+        """Variant model does NOT have variant_score field (DTO-only).
+
+        Note: Variant.eval_score is a different field - for post-generation evaluation.
+        variant_score is the rubric score from draft generation.
+        """
+        field_names = [f.name for f in Variant._meta.get_fields()]
+        assert "variant_score" not in field_names, (
+            "variant_score should be DTO-only per rubric §10"
+        )
+
+    def test_variant_model_has_no_quality_band_field(self):
+        """Variant model does NOT have quality_band field (DTO-only)."""
+        field_names = [f.name for f in Variant._meta.get_fields()]
+        assert "quality_band" not in field_names, (
+            "quality_band should be DTO-only per rubric §10"
+        )
+
+    def test_variant_model_has_no_rejection_reasons_field(self):
+        """Variant model does NOT have rejection_reasons field (DTO-only)."""
+        field_names = [f.name for f in Variant._meta.get_fields()]
+        assert "rejection_reasons" not in field_names, (
+            "rejection_reasons should be DTO-only per rubric §10"
+        )
+
+    # ContentPackageDraftDTO tests
+    def test_content_package_draft_dto_has_validity_fields(self):
+        """ContentPackageDraftDTO has all required rubric fields."""
+        from kairo.hero.dto import ContentPackageDraftDTO
+
+        field_names = list(ContentPackageDraftDTO.model_fields.keys())
+        assert "is_valid" in field_names, (
+            "ContentPackageDraftDTO must have is_valid field"
+        )
+        assert "rejection_reasons" in field_names, (
+            "ContentPackageDraftDTO must have rejection_reasons field"
+        )
+        assert "package_score" in field_names, (
+            "ContentPackageDraftDTO must have package_score field"
+        )
+        assert "package_score_breakdown" in field_names, (
+            "ContentPackageDraftDTO must have package_score_breakdown field"
+        )
+        assert "quality_band" in field_names, (
+            "ContentPackageDraftDTO must have quality_band field"
+        )
+        assert "thesis" in field_names, (
+            "ContentPackageDraftDTO must have thesis field"
+        )
+
+    # VariantDraftDTO tests
+    def test_variant_draft_dto_has_validity_fields(self):
+        """VariantDraftDTO has all required rubric fields."""
+        from kairo.hero.dto import VariantDraftDTO
+
+        field_names = list(VariantDraftDTO.model_fields.keys())
+        assert "is_valid" in field_names, (
+            "VariantDraftDTO must have is_valid field"
+        )
+        assert "rejection_reasons" in field_names, (
+            "VariantDraftDTO must have rejection_reasons field"
+        )
+        assert "variant_score" in field_names, (
+            "VariantDraftDTO must have variant_score field"
+        )
+        assert "variant_score_breakdown" in field_names, (
+            "VariantDraftDTO must have variant_score_breakdown field"
+        )
+        assert "quality_band" in field_names, (
+            "VariantDraftDTO must have quality_band field"
+        )
+
+    # ContentPackageDTO (API response) tests
+    def test_content_package_dto_does_not_expose_validity_fields(self):
+        """ContentPackageDTO (API response) does NOT expose validity fields.
+
+        Validity is internal - API consumers see persisted packages only.
+        """
+        from kairo.hero.dto import ContentPackageDTO
+
+        field_names = list(ContentPackageDTO.model_fields.keys())
+        assert "is_valid" not in field_names, (
+            "ContentPackageDTO should not expose is_valid"
+        )
+        assert "rejection_reasons" not in field_names, (
+            "ContentPackageDTO should not expose rejection_reasons"
+        )
+        assert "package_score" not in field_names, (
+            "ContentPackageDTO should not expose package_score"
+        )
+        assert "quality_band" not in field_names, (
+            "ContentPackageDTO should not expose quality_band"
+        )
+
+    # VariantDTO (API response) tests
+    def test_variant_dto_does_not_expose_validity_fields(self):
+        """VariantDTO (API response) does NOT expose validity fields.
+
+        Validity is internal - API consumers see persisted variants only.
+        """
+        from kairo.hero.dto import VariantDTO
+
+        field_names = list(VariantDTO.model_fields.keys())
+        assert "is_valid" not in field_names, (
+            "VariantDTO should not expose is_valid"
+        )
+        assert "rejection_reasons" not in field_names, (
+            "VariantDTO should not expose rejection_reasons"
+        )
+        assert "variant_score" not in field_names, (
+            "VariantDTO should not expose variant_score (note: eval_score is different)"
+        )
+        assert "quality_band" not in field_names, (
+            "VariantDTO should not expose quality_band"
+        )

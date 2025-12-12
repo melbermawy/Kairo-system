@@ -1,0 +1,7 @@
+{
+  "_comment": "Maps brand slugs to fixture filenames. Brands not listed here get empty bundles.",
+  "brand_slug_to_fixture": {
+    "acme-corp": "acme-corp.json",
+    "demo-brand": "demo-brand.json"
+  }
+}
