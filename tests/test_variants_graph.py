@@ -822,3 +822,76 @@ class TestQualityBands:
             if variant.quality_band == "publish_ready":
                 assert variant.is_valid is True
                 assert variant.variant_score >= 7
+
+    def test_variant_rubric_produces_weak_band_for_mid_score(
+        self,
+        sample_run_id,
+        sample_brand_snapshot,
+    ):
+        """Variant with mid-range score (valid but < 7) gets 'weak' quality band.
+
+        Per 10-variant-rubric.md:
+        - Score in [0, 12] total (4 dimensions × 3 max each)
+        - Quality bands: invalid (is_valid=False), weak (score < 7), publish_ready (score >= 7)
+
+        This test constructs output that:
+        - Passes all hard validation rules (is_valid=True)
+        - Has rubric scores that sum to a weak range (e.g., 4-6)
+
+        Score breakdown targets:
+        - clarity: <10 words = 0, 10-30 = 1, 30-100 = 2, 100+ = 3
+        - anchoring: keyword overlap with thesis (<1 = 0, 1 = 1, 2-3 = 2, 4+ = 3)
+        - channel_fit: depends on structure (linkedin needs line breaks for 3)
+        - cta: <3 chars = 0, 3-15 = 1, 15-40 = 2, 40+ = 3
+        """
+        # Create a package with unique thesis keywords for low anchoring
+        weak_package = ContentPackageDraftDTO(
+            title="Blockchain Technology Guide",
+            # Thesis with unique keywords unlikely to match body
+            thesis="Explore decentralized ledger systems and cryptographic protocols for enterprise applications.",
+            summary="Technical guide on blockchain infrastructure.",
+            primary_channel=Channel.LINKEDIN,
+            channels=[Channel.LINKEDIN],
+            cta="Learn about blockchain",
+            is_valid=True,
+            quality_band="board_ready",
+        )
+
+        # Target scores:
+        # - clarity: ~15 words = 1 (short body)
+        # - anchoring: 0-1 keyword overlap with thesis = 0-1
+        # - channel_fit: no line breaks for linkedin = 2
+        # - cta: ~5 chars = 1
+        # Total: 1 + 0 + 2 + 1 = 4 (weak band, clearly < 7)
+        weak_variants_output = VariantsGenerationOutput(
+            variants=[
+                RawVariant(
+                    channel="linkedin",
+                    # Body: ~15 words = clarity 1
+                    # No line breaks = channel_fit 2 (not 3)
+                    # No thesis keywords (blockchain, decentralized, ledger, cryptographic, protocols, enterprise) = anchoring 0
+                    body="Here is some generic content about business topics and marketing trends that meets minimum requirements but has no overlap with the specified package thesis whatsoever.",
+                    call_to_action="Hi!",  # ~3 chars = cta score 1
+                    reasoning="Minimal but valid variant with low anchoring",
+                ),
+            ]
+        )
+
+        fake_client = create_fake_llm_client(weak_variants_output)
+
+        result = graph_hero_variants_from_package(
+            run_id=sample_run_id,
+            package=weak_package,  # Use the weak package with unique thesis
+            brand_snapshot=sample_brand_snapshot,
+            llm_client=fake_client,
+        )
+
+        assert len(result) == 1
+        variant = result[0]
+
+        # Assert weak band criteria
+        assert variant.is_valid is True, f"Expected valid but got rejection: {variant.rejection_reasons}"
+        assert variant.variant_score is not None
+        assert 0 < variant.variant_score < 7, f"Expected score in weak range (0-7), got {variant.variant_score}. Breakdown: {variant.variant_score_breakdown}"
+        assert variant.quality_band == "weak", f"Expected 'weak' band, got '{variant.quality_band}'"
+        assert "invalid" not in [r.lower() for r in variant.rejection_reasons]

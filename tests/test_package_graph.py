@@ -784,6 +784,92 @@ class TestQualityBands:
             assert result.is_valid is True
             assert result.package_score >= 8
 
+    def test_package_rubric_produces_weak_band_for_mid_score(
+        self,
+        sample_run_id,
+        sample_brand_snapshot,
+        sample_opportunity,
+    ):
+        """Package with mid-range score (valid but < 8) gets 'weak' quality band.
+
+        Per 09-package-rubric.md:
+        - Score in [0, 15] total (5 dimensions × 3 max each)
+        - Quality bands: invalid (is_valid=False), weak (score < 8), board_ready (score >= 8)
+
+        This test constructs output that:
+        - Passes all hard validation rules (is_valid=True)
+        - Has rubric scores that sum to a weak range (e.g., 4-7)
+
+        Score breakdown targets:
+        - thesis: <30 chars = 0, 30-50 = 1, 50-100 = 2, 100+ = 3
+        - coherence: 0 channels = 0, 1 = 2, 2-3 = 3, 4+ = 1
+        - relevance: keyword overlap with opportunity (title + angle)
+        - cta: <5 chars = 0, 5-20 = 1, 20-50 = 2, 50+ = 3
+        - brand_alignment: base 2, +0.5 each for persona/pillar hint
+        """
+        # Create an opportunity with limited keywords
+        # Package thesis needs at least 1 keyword overlap to pass §5.6 validity check
+        from datetime import datetime, timezone
+        weak_opportunity = OpportunityDTO(
+            id=uuid4(),
+            brand_id=sample_brand_snapshot.brand_id,
+            title="Content strategy basics",  # 'content' keyword will overlap
+            angle="Learning fundamentals",  # 'learning' available
+            type=OpportunityType.TREND,
+            primary_channel=Channel.LINKEDIN,
+            score=85.0,
+            score_explanation="Test opportunity",
+            source="test",
+            suggested_channels=[Channel.LINKEDIN],
+            is_pinned=False,
+            is_snoozed=False,
+            created_via=CreatedVia.AI_SUGGESTED,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+        # Target scores (looking at actual scoring logic):
+        # - thesis: 30-50 chars = 1 (thesis length-based)
+        # - coherence: 1 channel = 2
+        # - relevance: 1 keyword overlap = 1 (need exactly 1 overlap)
+        # - cta: 5-20 chars = 1
+        # - brand_alignment: no hints = 2
+        # Total: 1 + 2 + 1 + 1 + 2 = 7 (weak band, just under 8)
+        #
+        # To get relevance=1, we need exactly 1 keyword overlap between
+        # (thesis + summary) and (opportunity.title + opportunity.angle)
+        weak_output = PackageSynthesisOutput(
+            package=RawPackageIdea(
+                title="Simple Guide",
+                # Thesis: exactly 30-50 chars = thesis score 1
+                # Only 'content' overlaps with opportunity
+                thesis="Learn about content in this guide.",  # 34 chars, 1 overlap
+                # Summary adds no new overlapping keywords
+                summary="A brief guide about writing things.",
+                primary_channel="linkedin",
+                channels=["linkedin"],  # Single channel = coherence 2
+                cta="Click here",  # Short CTA ~10 chars = cta score 1
+                # No persona_hint, no pillar_hint = brand_alignment 2
+                reasoning="Minimal but valid package with low relevance",
+            )
+        )
+
+        fake_client = create_fake_llm_client(weak_output)
+
+        result = graph_hero_package_from_opportunity(
+            run_id=sample_run_id,
+            brand_snapshot=sample_brand_snapshot,
+            opportunity=weak_opportunity,  # Use the weak opportunity
+            llm_client=fake_client,
+        )
+
+        # Assert weak band criteria
+        assert result.is_valid is True, f"Expected valid but got rejection: {result.rejection_reasons}"
+        assert result.package_score is not None
+        assert 0 < result.package_score < 8, f"Expected score in weak range (0-8), got {result.package_score}. Breakdown: {result.package_score_breakdown}"
+        assert result.quality_band == "weak", f"Expected 'weak' band, got '{result.quality_band}'"
+        assert "invalid" not in [r.lower() for r in result.rejection_reasons]
+
 
 # =============================================================================
 # CONVERSION TESTS

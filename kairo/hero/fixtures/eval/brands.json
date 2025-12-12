@@ -1,0 +1,107 @@
+{
+  "_comment": "Eval fixture brands for PR-10. These are eval-only identifiers, not DB PKs.",
+  "brands": [
+    {
+      "eval_brand_id": "eval_brand_revops_saas",
+      "tenant_slug": "eval-tenant",
+      "brand_slug": "eval-revops-saas",
+      "brand_name": "RevOps Intelligence",
+      "channels": ["linkedin", "x"],
+      "snapshot": {
+        "positioning": "We help B2B SaaS revenue teams eliminate data silos and drive predictable growth through unified RevOps automation.",
+        "voice_tone_tags": ["direct", "data-driven", "slightly contrarian", "no-nonsense"],
+        "taboos": ["hustle culture", "10x", "magic", "growth hacking"],
+        "pillars": [
+          {
+            "eval_pillar_id": "pillar_revops_efficiency",
+            "name": "RevOps Efficiency",
+            "description": "How to streamline revenue operations and eliminate manual work"
+          },
+          {
+            "eval_pillar_id": "pillar_data_quality",
+            "name": "Data Quality",
+            "description": "Ensuring clean, reliable data across the revenue stack"
+          }
+        ],
+        "personas": [
+          {
+            "eval_persona_id": "persona_revops_lead",
+            "name": "RevOps Leader",
+            "role": "Head of RevOps / VP Revenue Operations",
+            "summary": "Manages revenue tech stack and cross-functional alignment"
+          },
+          {
+            "eval_persona_id": "persona_sales_ops",
+            "name": "Sales Ops Manager",
+            "role": "Sales Operations Manager",
+            "summary": "Focuses on CRM hygiene and sales process optimization"
+          }
+        ]
+      }
+    },
+    {
+      "eval_brand_id": "eval_brand_devtools",
+      "tenant_slug": "eval-tenant",
+      "brand_slug": "eval-devtools",
+      "brand_name": "DevFlow",
+      "channels": ["linkedin", "x"],
+      "snapshot": {
+        "positioning": "Developer productivity platform that cuts code review time by 50% with intelligent automation.",
+        "voice_tone_tags": ["technical", "practical", "developer-first", "straightforward"],
+        "taboos": ["no-code hype", "disruption", "revolutionary"],
+        "pillars": [
+          {
+            "eval_pillar_id": "pillar_dev_productivity",
+            "name": "Developer Productivity",
+            "description": "Practical tips and workflows for shipping faster"
+          },
+          {
+            "eval_pillar_id": "pillar_code_quality",
+            "name": "Code Quality",
+            "description": "Best practices for maintainable, testable code"
+          }
+        ],
+        "personas": [
+          {
+            "eval_persona_id": "persona_eng_lead",
+            "name": "Engineering Lead",
+            "role": "Engineering Manager / Tech Lead",
+            "summary": "Responsible for team velocity and code quality standards"
+          }
+        ]
+      }
+    },
+    {
+      "eval_brand_id": "eval_brand_b2c_lifestyle",
+      "tenant_slug": "eval-tenant",
+      "brand_slug": "eval-wellness-co",
+      "brand_name": "MindfulLiving",
+      "channels": ["linkedin", "newsletter"],
+      "snapshot": {
+        "positioning": "Premium wellness brand helping busy professionals build sustainable self-care routines.",
+        "voice_tone_tags": ["warm", "approachable", "evidence-based", "encouraging"],
+        "taboos": ["quick fixes", "miracle cures", "shame-based motivation"],
+        "pillars": [
+          {
+            "eval_pillar_id": "pillar_daily_habits",
+            "name": "Daily Habits",
+            "description": "Small, sustainable changes for better wellbeing"
+          },
+          {
+            "eval_pillar_id": "pillar_stress_management",
+            "name": "Stress Management",
+            "description": "Evidence-based techniques for managing work stress"
+          }
+        ],
+        "personas": [
+          {
+            "eval_persona_id": "persona_busy_exec",
+            "name": "Busy Executive",
+            "role": "C-suite / Senior Director",
+            "summary": "High-pressure role, limited time, values efficiency in self-care"
+          }
+        ]
+      }
+    }
+  ]
+}
