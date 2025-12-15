@@ -1,0 +1,122 @@
+{
+  "run_id": "3046be62-9e59-4332-90b1-75fa7844864c",
+  "brand_slug": "eval-revops-saas",
+  "timestamp": "2025-12-13T18:54:56.051556+00:00",
+  "llm_disabled": false,
+  "status": "degraded",
+  "stage_status": {
+    "f1_status": "degraded",
+    "f2_status": "degraded",
+    "failure_reason": "graph_error",
+    "is_structurally_valid": true
+  },
+  "quality_labels": {
+    "f1_label": "bad",
+    "f2_label": "partial",
+    "run_label": "bad"
+  },
+  "metrics": {
+    "opportunity_count": 6,
+    "valid_opportunity_count": 6,
+    "package_count": 1,
+    "variant_count": 2,
+    "taboo_violations": 0,
+    "f1_status": "degraded",
+    "f2_status": "degraded",
+    "opportunity_coverage": 0.0,
+    "avg_opportunity_score": 68.33333333333333,
+    "golden_match_count": 0
+  },
+  "case": {
+    "eval_brand_id": "eval_brand_revops_saas",
+    "brand_name": "RevOps Intelligence",
+    "opportunities": [
+      {
+        "id": "39de1ba9-9123-5ef1-8c77-f082ab14a5b7",
+        "title": "Industry trend: AI adoption in RevOps Intelligence's sector",
+        "angle": "Rising discussion about AI tools - opportunity to share our perspective on practical implementation.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 75.0,
+        "is_valid": true
+      },
+      {
+        "id": "28cf4a98-055f-515a-9ca0-693063536be7",
+        "title": "Weekly thought leadership post",
+        "angle": "Regular cadence content about our core expertise area.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 72.0,
+        "is_valid": true
+      },
+      {
+        "id": "c26f8af2-2da1-5966-99a9-77c61d882ffd",
+        "title": "Customer success story",
+        "angle": "Recent customer achieved notable results - great case study material.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 70.0,
+        "is_valid": true
+      },
+      {
+        "id": "e66b6023-7670-504c-acf1-992b25b00786",
+        "title": "Competitor announcement response",
+        "angle": "Competitor just announced a feature - opportunity to differentiate our approach.",
+        "type": "competitive",
+        "primary_channel": "x",
+        "score": 68.0,
+        "is_valid": true
+      },
+      {
+        "id": "1251ef4c-b005-50e5-b339-714c63460419",
+        "title": "Industry report commentary",
+        "angle": "New industry report released - can provide contrarian take aligned with our positioning.",
+        "type": "trend",
+        "primary_channel": "x",
+        "score": 65.0,
+        "is_valid": true
+      },
+      {
+        "id": "05d1575d-d55e-551c-8a5a-800cd78e7dde",
+        "title": "Behind the scenes: Product development",
+        "angle": "Authenticity content showing how we build - builds trust with audience.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 60.0,
+        "is_valid": true
+      }
+    ],
+    "packages": [
+      {
+        "id": "ee5002c8-d228-4807-a0a1-2a801c65fc2b",
+        "title": "Practical AI Implementation in RevOps: Beyond the Hype",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "39de1ba9-9123-5ef1-8c77-f082ab14a5b7"
+      }
+    ],
+    "variants": [
+      {
+        "id": "485b3f0f-d97d-4dd5-b1a0-ba796437c583",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "ee5002c8-d228-4807-a0a1-2a801c65fc2b",
+        "body_preview": "AI in RevOps: It's not about the latest trend, but about effective implementation. \n\nIn the world of"
+      },
+      {
+        "id": "e73ea628-9c5d-4189-b4e3-d679110ca784",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "ee5002c8-d228-4807-a0a1-2a801c65fc2b",
+        "body_preview": "AI in RevOps isn't about trends\u2014it's about integration. Unite data, automate processes, and drive gr"
+      }
+    ],
+    "warnings": [
+      "Error processing opportunity 28cf4a98-055f-515a-9ca0-693063536be7: Package failed rubric validation: thesis doesn't clearly link to opportunity (\u00a75.6)"
+    ]
+  },
+  "errors": []
+}

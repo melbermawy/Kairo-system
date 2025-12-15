@@ -150,13 +150,19 @@ REQUIREMENTS:
    - BAD: "write about pricing"
    - GOOD: "show how our pricing works in plain numbers to rebuild trust"
 3. Summary: 2-3 sentences explaining the content approach
-4. Channels: Select channels that fit the content type
-   - Include the opportunity's primary channel
-   - Add others if they make sense (e.g., linkedin + x for announcement content)
-5. CTA: Clear call-to-action aligned with the package intent
-6. Pattern hints: Suggest content patterns if relevant
+4. primary_channel: The main channel for this package (must be one of: linkedin, x, newsletter)
+5. channels: Array of all channels for this package (include primary_channel plus any others)
+6. CTA: Clear call-to-action aligned with the package intent
+7. Pattern hints: Suggest content patterns if relevant
 
-Return your response as JSON with a "package" object."""
+Return your response as JSON with a "package" object containing these fields:
+- title (string)
+- thesis (string, 20-500 chars)
+- summary (string, 20-1000 chars)
+- primary_channel (string: "linkedin", "x", or "newsletter")
+- channels (array of strings)
+- cta (string, optional)
+- pattern_hints (array of strings, optional)"""
 
 
 # =============================================================================

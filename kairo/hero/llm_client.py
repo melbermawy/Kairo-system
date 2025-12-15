@@ -20,6 +20,11 @@ Temperature/sampling policy (deterministic by default for eval):
 - Default: temperature=0.0, top_p=1.0 (fully deterministic)
 - Override via env: KAIRO_LLM_TEMP_FAST, KAIRO_LLM_TOP_P_FAST, etc.
 
+API Routing (PR-7.1):
+- GPT-5.x models (gpt-5-*, gpt-5.1-*, etc.) use the Responses API
+- Older models (gpt-4o, gpt-3.5-turbo, etc.) use Chat Completions API
+- This routing is automatic based on model name prefix detection
+
 This module does NOT contain any graphs or agents - it's pure infrastructure.
 """
 
@@ -45,6 +50,119 @@ logger = logging.getLogger("kairo.llm")
 # =============================================================================
 
 Role = Literal["fast", "heavy"]
+
+
+# =============================================================================
+# STUB JSON RESPONSES FOR LLM_DISABLED MODE
+# =============================================================================
+
+# Stub responses keyed by flow name. Each stub must parse correctly against
+# the expected Pydantic schema for that flow.
+
+# Diverse titles to avoid deduplication filtering (Jaccard similarity threshold is 0.75)
+_STUB_OPPORTUNITY_TITLES = [
+    "AI automation transforming customer workflows today",
+    "Revenue forecasting accuracy improvements with data science",
+    "Building trust through transparent communication",
+    "Competitive analysis reveals market positioning gaps",
+    "Customer success stories drive social proof",
+    "Industry report highlights emerging technology trends",
+    "Behind the scenes product development journey",
+    "Weekly insights for executive decision makers",
+]
+
+_STUB_SYNTHESIS_OUTPUT = {
+    "opportunities": [
+        {
+            "title": _STUB_OPPORTUNITY_TITLES[i],
+            "angle": f"Unique angle {i}: This stub opportunity demonstrates the value we deliver to our target personas through clear communication and actionable insights.",
+            "type": ["trend", "evergreen", "competitive", "campaign", "trend", "evergreen", "trend", "evergreen"][i],
+            "primary_channel": "linkedin" if i % 2 == 0 else "x",
+            "suggested_channels": ["linkedin", "x"],
+            "reasoning": f"Stub reasoning {i} for eval purposes.",
+            "why_now": f"Stub timing {i}: Current market dynamics and recent developments make this topic particularly relevant for our audience right now.",
+            "source": "stub_source",
+            "source_url": None,
+            "persona_hint": None,
+            "pillar_hint": None,
+        }
+        for i in range(8)
+    ]
+}
+
+# New minimal scoring output format - just idx, score, band, reason
+_STUB_SCORING_OUTPUT = {
+    "scores": [
+        {
+            "idx": i,
+            "score": 75 + (i * 2) % 20,  # Scores: 75, 77, 79, 81, 83, 85, 87, 89
+            "band": "strong",  # All stub scores are 65+
+            "reason": f"Stub score {i}: Good alignment.",
+        }
+        for i in range(8)
+    ]
+}
+
+_STUB_PACKAGE_OUTPUT = {
+    "package": {
+        "title": "Stub package: Demonstrating value through clear communication",
+        "thesis": "Our stub thesis shows how clear, value-driven content builds trust and drives meaningful engagement with our target audience.",
+        "summary": "This stub package demonstrates the content approach for eval purposes. It covers the key points that matter to our audience.",
+        "primary_channel": "linkedin",
+        "channels": ["linkedin", "x"],
+        "cta": "Learn more about our approach",
+        "pattern_hints": ["thought_leadership", "case_study"],
+        "persona_hint": None,
+        "pillar_hint": None,
+        "notes_for_humans": "Stub package for eval - replace with real LLM output",
+        "reasoning": "Stub reasoning for package generation.",
+    }
+}
+
+_STUB_VARIANTS_OUTPUT = {
+    "variants": [
+        {
+            "channel": "linkedin",
+            "title": "Stub LinkedIn Post: Delivering Value",
+            "body": "Here's what we've learned about this opportunity:\n\nThe key insight is that our audience cares deeply about value and transparency.\n\nWhen you focus on clear communication, everything else follows.\n\nWhat's your experience with this?",
+            "call_to_action": "Share your thoughts below",
+            "pattern_hint": "thought_leadership",
+            "reasoning": "Stub variant for LinkedIn channel.",
+        },
+        {
+            "channel": "x",
+            "title": None,
+            "body": "Key insight: value and transparency drive trust.\n\nWhen you focus on clear communication, everything else follows.\n\n🧵",
+            "call_to_action": None,
+            "pattern_hint": "thread_starter",
+            "reasoning": "Stub variant for X channel.",
+        },
+    ]
+}
+
+
+def _get_stub_json_for_flow(flow: str) -> str:
+    """
+    Get stub JSON response for a given flow.
+
+    Returns valid JSON that parses against the expected schema for each flow.
+    Falls back to an empty object for unknown flows.
+    """
+    flow_lower = flow.lower()
+
+    if "synthesis" in flow_lower:
+        return json.dumps(_STUB_SYNTHESIS_OUTPUT)
+    elif "scoring" in flow_lower:
+        return json.dumps(_STUB_SCORING_OUTPUT)
+    elif "package" in flow_lower:
+        return json.dumps(_STUB_PACKAGE_OUTPUT)
+    elif "variant" in flow_lower:
+        return json.dumps(_STUB_VARIANTS_OUTPUT)
+    else:
+        # Unknown flow - return a placeholder that signals it's a stub
+        return json.dumps({"_stub": True, "_flow": flow})
+
+
 Status = Literal["success", "failure", "disabled"]
 
 T = TypeVar("T", bound=BaseModel)
@@ -85,6 +203,25 @@ class StructuredOutputError(Exception):
 # =============================================================================
 
 
+def _is_responses_api_model(model: str) -> bool:
+    """
+    Check if a model should use the Responses API.
+
+    GPT-5.x models (gpt-5-*, gpt-5.1-*, etc.) require the Responses API.
+    Older models (gpt-4o, gpt-3.5-turbo, etc.) use Chat Completions API.
+
+    Args:
+        model: Model name string
+
+    Returns:
+        True if model should use Responses API, False for Chat Completions
+    """
+    # GPT-5 family models use Responses API
+    # Pattern: gpt-5, gpt-5-*, gpt-5.1, gpt-5.1-*, etc.
+    model_lower = model.lower()
+    return model_lower.startswith("gpt-5")
+
+
 @dataclass(frozen=True)
 class LLMConfig:
     """
@@ -94,8 +231,8 @@ class LLMConfig:
 
     Environment Variables:
     - OPENAI_API_KEY: API key for OpenAI (required for real calls)
-    - KAIRO_LLM_MODEL_FAST: Model name for fast role (default: gpt-4.1-mini)
-    - KAIRO_LLM_MODEL_HEAVY: Model name for heavy role (default: gpt-5.1-thinking)
+    - KAIRO_LLM_MODEL_FAST: Model name for fast role (default: gpt-5-nano)
+    - KAIRO_LLM_MODEL_HEAVY: Model name for heavy role (default: gpt-5-pro)
     - LLM_DISABLED: Set to "true" or "1" to disable real LLM calls
     - KAIRO_LLM_TIMEOUT_FAST: Timeout in seconds for fast calls (default: 8)
     - KAIRO_LLM_TIMEOUT_HEAVY: Timeout in seconds for heavy calls (default: 20)
@@ -109,9 +246,10 @@ class LLMConfig:
     - KAIRO_LLM_COST_HEAVY_USD_PER_1K: Cost per 1K tokens for heavy (default: 0.03)
     """
 
-    # Model names
-    fast_model_name: str = field(default_factory=lambda: "gpt-4.1-mini")
-    heavy_model_name: str = field(default_factory=lambda: "gpt-5.1-thinking")
+    # Model names (aligned with load_config_from_env defaults)
+    # Valid GPT-5 models: gpt-5-nano (fast), gpt-5-pro (heavy)
+    fast_model_name: str = field(default_factory=lambda: "gpt-5-nano")
+    heavy_model_name: str = field(default_factory=lambda: "gpt-5-pro")
 
     # API key (may be None if LLM_DISABLED)
     api_key: str | None = None
@@ -152,17 +290,10 @@ def load_config_from_env() -> LLMConfig:
     # Get API key (may be None)
     api_key = os.getenv("OPENAI_API_KEY")
 
-    # Get model names with defaults
-    fast_model = os.getenv("KAIRO_LLM_MODEL_FAST", "gpt-4.1-mini")
-    heavy_model = os.getenv("KAIRO_LLM_MODEL_HEAVY", "gpt-5.1-thinking")
-
-    # If no API key set (test environment), use test model names
-    # unless explicit model names were provided via env
-    if not api_key and not llm_disabled:
-        if not os.getenv("KAIRO_LLM_MODEL_FAST"):
-            fast_model = "test-fast-model"
-        if not os.getenv("KAIRO_LLM_MODEL_HEAVY"):
-            heavy_model = "test-heavy-model"
+    # Get model names with defaults (per spec: gpt-5-nano fast, gpt-5-pro heavy)
+    # Valid GPT-5 models: gpt-5-nano, gpt-5-mini, gpt-5, gpt-5-pro
+    fast_model = os.getenv("KAIRO_LLM_MODEL_FAST", "gpt-5-nano")
+    heavy_model = os.getenv("KAIRO_LLM_MODEL_HEAVY", "gpt-5-pro")
 
     # Parse timeouts
     try:
@@ -355,6 +486,7 @@ class LLMClient:
         tools: Sequence[Mapping[str, Any]] | None = None,
         system_prompt: str | None = None,
         max_output_tokens: int | None = None,
+        temperature: float | None = None,
         run_id: "UUID | None" = None,
         trigger_source: str = "api",
     ) -> LLMResponse:
@@ -371,6 +503,7 @@ class LLMClient:
             tools: Optional list of tool definitions (for future use)
             system_prompt: Optional system prompt
             max_output_tokens: Override max output tokens (uses config default if None)
+            temperature: Override temperature (uses config default for role if None)
             run_id: Optional run ID for correlation (auto-generated if None)
             trigger_source: Trigger source for observability (api, cron, eval, manual)
 
@@ -391,18 +524,19 @@ class LLMClient:
             model = self.config.fast_model_name
             timeout = self.config.timeout_fast
             default_max_tokens = self.config.max_tokens_fast
-            temperature = self.config.temperature_fast
+            default_temperature = self.config.temperature_fast
             top_p = self.config.top_p_fast
             cost_per_1k = self.config.cost_fast_usd_per_1k
         else:
             model = self.config.heavy_model_name
             timeout = self.config.timeout_heavy
             default_max_tokens = self.config.max_tokens_heavy
-            temperature = self.config.temperature_heavy
+            default_temperature = self.config.temperature_heavy
             top_p = self.config.top_p_heavy
             cost_per_1k = self.config.cost_heavy_usd_per_1k
 
         actual_max_tokens = max_output_tokens or default_max_tokens
+        actual_temperature = temperature if temperature is not None else default_temperature
 
         start_time = time.perf_counter()
 
@@ -410,12 +544,14 @@ class LLMClient:
         if self.config.llm_disabled:
             latency_ms = int((time.perf_counter() - start_time) * 1000)
             tokens_in = len(prompt.split())  # Rough estimate
-            tokens_out = 10
+            # Get stub JSON based on flow - this must parse against the expected schema
+            stub_text = _get_stub_json_for_flow(flow)
+            tokens_out = len(stub_text.split())
             total_tokens = tokens_in + tokens_out
             estimated_cost = total_tokens / 1000.0 * cost_per_1k
 
             response = LLMResponse(
-                raw_text=f"[LLM_DISABLED STUB] prompt={prompt[:100]}...",
+                raw_text=stub_text,
                 model=model,
                 usage_tokens_in=tokens_in,
                 usage_tokens_out=tokens_out,
@@ -449,7 +585,7 @@ class LLMClient:
                 system_prompt=system_prompt,
                 tools=tools,
                 max_tokens=actual_max_tokens,
-                temperature=temperature,
+                temperature=actual_temperature,
                 top_p=top_p,
                 timeout=timeout,
             )
@@ -526,7 +662,9 @@ class LLMClient:
         """
         Internal method to call the LLM provider.
 
-        This method houses the actual provider SDK call (OpenAI).
+        Routes to either Responses API or Chat Completions API based on model.
+        GPT-5.x models use Responses API; older models use Chat Completions.
+
         Tests should patch this method to avoid real HTTP calls.
 
         Args:
@@ -540,7 +678,7 @@ class LLMClient:
             timeout: Request timeout in seconds
 
         Returns:
-            Dict with 'content' and 'usage' keys
+            Dict with 'content' and 'usage' keys (normalized across both APIs)
 
         Raises:
             Exception: Any provider error (will be wrapped by caller)
@@ -559,17 +697,125 @@ class LLMClient:
                 "OPENAI_API_KEY not set. Set the environment variable or use LLM_DISABLED=true for testing."
             )
 
+        # Create client
+        client = openai.OpenAI(
+            api_key=self.config.api_key,
+            timeout=timeout,
+        )
+
+        # Route based on model - GPT-5.x uses Responses API
+        if _is_responses_api_model(model):
+            return self._call_responses_api(
+                client=client,
+                model=model,
+                prompt=prompt,
+                system_prompt=system_prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+            )
+        else:
+            return self._call_chat_completions_api(
+                client=client,
+                model=model,
+                prompt=prompt,
+                system_prompt=system_prompt,
+                tools=tools,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+            )
+
+    def _call_responses_api(
+        self,
+        *,
+        client: Any,
+        model: str,
+        prompt: str,
+        system_prompt: str | None,
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+    ) -> dict[str, Any]:
+        """
+        Call OpenAI Responses API (for GPT-5.x models).
+
+        The Responses API uses different parameter names:
+        - 'input' instead of 'messages'
+        - 'instructions' instead of system message
+        - 'max_output_tokens' instead of 'max_tokens'
+        - Response has 'output_text' and 'usage.input_tokens/output_tokens'
+
+        Args:
+            client: OpenAI client instance
+            model: Model name (must be gpt-5.x)
+            prompt: User prompt
+            system_prompt: Optional system instructions
+            max_tokens: Max output tokens
+            temperature: Sampling temperature
+            top_p: Top-p sampling parameter
+
+        Returns:
+            Dict with 'content' and 'usage' keys (normalized format)
+        """
+        # Build request kwargs for Responses API
+        request_kwargs: dict[str, Any] = {
+            "model": model,
+            "input": prompt,
+            "max_output_tokens": max_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+        }
+
+        # Add system instructions if provided
+        if system_prompt:
+            request_kwargs["instructions"] = system_prompt
+
+        # Make the Responses API call
+        response = client.responses.create(**request_kwargs)
+
+        # Extract content and usage (Responses API format)
+        content = response.output_text or ""
+        usage = {
+            "prompt_tokens": response.usage.input_tokens if response.usage else 0,
+            "completion_tokens": response.usage.output_tokens if response.usage else 0,
+        }
+
+        return {"content": content, "usage": usage}
+
+    def _call_chat_completions_api(
+        self,
+        *,
+        client: Any,
+        model: str,
+        prompt: str,
+        system_prompt: str | None,
+        tools: Sequence[Mapping[str, Any]] | None,
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+    ) -> dict[str, Any]:
+        """
+        Call OpenAI Chat Completions API (for older models like gpt-4o).
+
+        Args:
+            client: OpenAI client instance
+            model: Model name
+            prompt: User prompt
+            system_prompt: Optional system prompt
+            tools: Optional tool definitions
+            max_tokens: Max output tokens
+            temperature: Sampling temperature
+            top_p: Top-p sampling parameter
+
+        Returns:
+            Dict with 'content' and 'usage' keys
+        """
         # Build messages
         messages: list[dict[str, str]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
-
-        # Create client and make request
-        client = openai.OpenAI(
-            api_key=self.config.api_key,
-            timeout=timeout,
-        )
 
         # Build request kwargs
         request_kwargs: dict[str, Any] = {

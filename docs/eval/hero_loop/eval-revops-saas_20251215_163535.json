@@ -1,0 +1,391 @@
+{
+  "run_id": "0ba983ea-3b10-4dfb-9e4a-ceda4451be8c",
+  "brand_slug": "eval-revops-saas",
+  "timestamp": "2025-12-15T16:35:35.096358+00:00",
+  "llm_disabled": false,
+  "status": "completed",
+  "stage_status": {
+    "f1_status": "ok",
+    "f2_status": "ok",
+    "failure_reason": null,
+    "is_structurally_valid": true
+  },
+  "quality_labels": {
+    "f1_label": "partial",
+    "f2_label": "partial",
+    "run_label": "partial"
+  },
+  "metrics": {
+    "opportunity_count": 11,
+    "valid_opportunity_count": 11,
+    "package_count": 8,
+    "variant_count": 24,
+    "taboo_violations": 0,
+    "f1_status": "ok",
+    "f2_status": "ok",
+    "opportunity_coverage": 0.0,
+    "avg_opportunity_score": 72.72727272727273,
+    "golden_match_count": 0
+  },
+  "case": {
+    "eval_brand_id": "eval_brand_revops_saas",
+    "brand_name": "RevOps Intelligence",
+    "opportunities": [
+      {
+        "id": "2c1645c3-39df-576b-bdc7-55d5b641f66d",
+        "title": "The Role of AI in RevOps: Transforming Revenue Strategies",
+        "angle": "Examine how AI technologies are being integrated into RevOps to enhance decision-making and efficiency.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 85.0,
+        "is_valid": true
+      },
+      {
+        "id": "c0bf0e8f-ed8d-5ec7-9e0a-b6f564ac7211",
+        "title": "The Future of RevOps: Automation Trends to Watch",
+        "angle": "Explore the latest automation trends in RevOps and how they are shaping the future of B2B SaaS revenue teams.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 80.0,
+        "is_valid": true
+      },
+      {
+        "id": "fa02c59f-32ea-5c7f-b03f-9b1724673248",
+        "title": "The Impact of Remote Work on RevOps Strategies",
+        "angle": "Discuss how the shift to remote work has influenced RevOps strategies and what companies can do to adapt.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 80.0,
+        "is_valid": true
+      },
+      {
+        "id": "3fe8b9cf-7c6a-58f5-b18d-32bf8a6fa962",
+        "title": "RevOps Metrics That Matter: A Data-Driven Approach",
+        "angle": "Identify the key metrics that revenue teams should focus on to drive performance and growth.",
+        "type": "evergreen",
+        "primary_channel": "x",
+        "score": 75.0,
+        "is_valid": true
+      },
+      {
+        "id": "4f7a907a-9352-5839-b864-45a12af1ecd0",
+        "title": "RevOps Tools: Choosing the Right Tech Stack",
+        "angle": "Guide revenue teams in selecting the most effective tools and technologies for their RevOps needs.",
+        "type": "evergreen",
+        "primary_channel": "x",
+        "score": 75.0,
+        "is_valid": true
+      },
+      {
+        "id": "0329ba32-9ca8-553a-a212-b3cb9a0177a7",
+        "title": "Unified RevOps Automation: The Key to Predictable Growth",
+        "angle": "Discuss the importance of unified RevOps automation in achieving predictable growth for B2B SaaS companies.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 70.0,
+        "is_valid": true
+      },
+      {
+        "id": "b6414bbf-d833-5507-9595-1c869b1045eb",
+        "title": "Building a Unified RevOps Team: Best Practices",
+        "angle": "Share best practices for creating a cohesive RevOps team that aligns sales, marketing, and customer success.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 70.0,
+        "is_valid": true
+      },
+      {
+        "id": "b21c0b00-ca4e-5d59-9342-3ad9c85af9fd",
+        "title": "Aligning Sales and Marketing Through RevOps",
+        "angle": "Provide strategies for aligning sales and marketing teams to drive revenue growth through RevOps.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 70.0,
+        "is_valid": true
+      },
+      {
+        "id": "9644f9b5-55fb-571d-b196-610bb128a5e4",
+        "title": "How Competitors Are Leveraging RevOps for Market Leadership",
+        "angle": "Analyze how leading companies are using RevOps strategies to gain a competitive edge in the B2B SaaS market.",
+        "type": "competitive",
+        "primary_channel": "x",
+        "score": 65.0,
+        "is_valid": true
+      },
+      {
+        "id": "d00543f3-f697-58cb-81b9-73c5f2d79160",
+        "title": "RevOps and Customer Experience: A Symbiotic Relationship",
+        "angle": "Explore how RevOps strategies can enhance customer experience and drive loyalty.",
+        "type": "evergreen",
+        "primary_channel": "x",
+        "score": 65.0,
+        "is_valid": true
+      },
+      {
+        "id": "c8cb08eb-aea8-508a-82d0-ec9d25d2dc23",
+        "title": "RevOps Intelligence: The Next Frontier in Revenue Management",
+        "angle": "Introduce the concept of RevOps Intelligence and its potential to revolutionize revenue management.",
+        "type": "competitive",
+        "primary_channel": "x",
+        "score": 65.0,
+        "is_valid": true
+      }
+    ],
+    "packages": [
+      {
+        "id": "4fc7d3e2-40e1-4c68-bb54-31cb39461fa5",
+        "title": "Harnessing AI for Smarter RevOps: A Deep Dive into Transformative Strategies",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "2c1645c3-39df-576b-bdc7-55d5b641f66d"
+      },
+      {
+        "id": "13609b63-9399-48c7-a1a6-99b09bce8388",
+        "title": "RevOps Automation: Trends Shaping the Future of B2B SaaS",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "c0bf0e8f-ed8d-5ec7-9e0a-b6f564ac7211"
+      },
+      {
+        "id": "c00d04e2-401a-4934-98fb-e854bd564bbc",
+        "title": "Adapting RevOps Strategies for a Remote-First World",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "fa02c59f-32ea-5c7f-b03f-9b1724673248"
+      },
+      {
+        "id": "bb39ede5-9e1d-4c26-9489-ef39ad89dce8",
+        "title": "Unlocking Growth: The RevOps Metrics That Matter",
+        "status": "draft",
+        "channels": [
+          "x",
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "3fe8b9cf-7c6a-58f5-b18d-32bf8a6fa962"
+      },
+      {
+        "id": "21f86b85-4a63-4aa4-8cf9-4da170c27dc3",
+        "title": "Mastering Your RevOps Tech Stack: A No-Nonsense Guide",
+        "status": "draft",
+        "channels": [
+          "x",
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "4f7a907a-9352-5839-b864-45a12af1ecd0"
+      },
+      {
+        "id": "2b07d79a-94ce-46a2-b7be-919cf268f409",
+        "title": "Harnessing Unified RevOps Automation for Consistent SaaS Growth",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "0329ba32-9ca8-553a-a212-b3cb9a0177a7"
+      },
+      {
+        "id": "8a9ed8c4-b904-4be3-828b-c6177e743c28",
+        "title": "Creating a Cohesive RevOps Team: Aligning Sales, Marketing, and Customer Success",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "b6414bbf-d833-5507-9595-1c869b1045eb"
+      },
+      {
+        "id": "4769326f-d76e-4f24-ade8-1fd1f4676dc4",
+        "title": "RevOps: The Bridge Between Sales and Marketing",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "b21c0b00-ca4e-5d59-9342-3ad9c85af9fd"
+      }
+    ],
+    "variants": [
+      {
+        "id": "30534b99-cc19-4c1b-b361-3f323a7c361b",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "4fc7d3e2-40e1-4c68-bb54-31cb39461fa5",
+        "body_preview": "AI is not just a buzzword\u2014it's a game-changer for RevOps. In today's fast-paced B2B SaaS landscape, "
+      },
+      {
+        "id": "14f75d0a-3dd1-48f7-b5df-91494b6d0bb3",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "4fc7d3e2-40e1-4c68-bb54-31cb39461fa5",
+        "body_preview": "AI is reshaping RevOps! Break down data silos and drive growth with smarter, data-driven strategies."
+      },
+      {
+        "id": "b1fc2008-2832-485d-af2c-c11fc9049172",
+        "channel": "newsletter",
+        "status": "draft",
+        "package_id": "4fc7d3e2-40e1-4c68-bb54-31cb39461fa5",
+        "body_preview": "Hello RevOps Enthusiast,\n\nIn the ever-evolving world of B2B SaaS, staying ahead of the curve is cruc"
+      },
+      {
+        "id": "6a32c74e-c160-4ec1-8796-578c2efb3522",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "13609b63-9399-48c7-a1a6-99b09bce8388",
+        "body_preview": "Is your B2B SaaS revenue team ready for the future? \ud83d\ude80 Embracing RevOps automation is no longer optio"
+      },
+      {
+        "id": "2cd1eb05-658c-429d-bf98-c212b720594d",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "13609b63-9399-48c7-a1a6-99b09bce8388",
+        "body_preview": "RevOps automation is the future of B2B SaaS. \ud83d\ude80 Embrace AI-driven insights & data integration to elim"
+      },
+      {
+        "id": "70a36af7-5fc6-4566-9ad0-65f7b414eb88",
+        "channel": "newsletter",
+        "status": "draft",
+        "package_id": "13609b63-9399-48c7-a1a6-99b09bce8388",
+        "body_preview": "Hello,\n\nIn the fast-paced world of B2B SaaS, staying competitive means staying ahead of the curve. O"
+      },
+      {
+        "id": "66592972-f386-4bc3-a468-6bae1d28fd70",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "c00d04e2-401a-4934-98fb-e854bd564bbc",
+        "body_preview": "Remote work isn't just a trend\u2014it's a new reality that demands a shift in RevOps strategies. As team"
+      },
+      {
+        "id": "b97015ce-b60c-4e2e-b2cb-f763cbb8b165",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "c00d04e2-401a-4934-98fb-e854bd564bbc",
+        "body_preview": "Remote work demands a RevOps revolution. Integrated systems are no longer optional\u2014they're essential"
+      },
+      {
+        "id": "1fdf4e25-15bc-4bf4-8d0f-d56f4c4e6c78",
+        "channel": "newsletter",
+        "status": "draft",
+        "package_id": "c00d04e2-401a-4934-98fb-e854bd564bbc",
+        "body_preview": "Hello,\n\nThe shift to remote work has fundamentally changed how we approach RevOps. With teams spread"
+      },
+      {
+        "id": "3479c9a6-14a0-47d4-b72b-3805508f49a1",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "bb39ede5-9e1d-4c26-9489-ef39ad89dce8",
+        "body_preview": "Are you drowning in data but still struggling to drive growth? It's time to focus on the RevOps metr"
+      },
+      {
+        "id": "01c5b885-2baa-42e0-b2a8-705535896b66",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "bb39ede5-9e1d-4c26-9489-ef39ad89dce8",
+        "body_preview": "Drowning in data? Focus on the RevOps metrics that matter. Streamline decisions, enhance performance"
+      },
+      {
+        "id": "c99ed1a2-f376-4cd5-9204-308c06330528",
+        "channel": "newsletter",
+        "status": "draft",
+        "package_id": "bb39ede5-9e1d-4c26-9489-ef39ad89dce8",
+        "body_preview": "Hello,\n\nIn today's data-driven world, it's easy for revenue teams to get lost in a sea of numbers. B"
+      },
+      {
+        "id": "ade9f91f-6ea6-4b88-8c08-ac87160a1f61",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "21f86b85-4a63-4aa4-8cf9-4da170c27dc3",
+        "body_preview": "Is your RevOps tech stack a tangled web of tools that don't talk to each other? It's time to cut thr"
+      },
+      {
+        "id": "58becc2e-1a6c-481e-ac1f-6be72949907c",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "21f86b85-4a63-4aa4-8cf9-4da170c27dc3",
+        "body_preview": "Is your RevOps tech stack holding you back? \ud83d\udee0\ufe0f Our no-nonsense guide shows you how to choose tools t"
+      },
+      {
+        "id": "bcd9d546-98d5-46b1-9b1e-9b9f3d88b3de",
+        "channel": "newsletter",
+        "status": "draft",
+        "package_id": "21f86b85-4a63-4aa4-8cf9-4da170c27dc3",
+        "body_preview": "Hello RevOps Leaders,\n\nIn the world of B2B SaaS, your tech stack can either be your greatest ally or"
+      },
+      {
+        "id": "d44c1abd-2329-40fa-8220-bf67c11ee01f",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "2b07d79a-94ce-46a2-b7be-919cf268f409",
+        "body_preview": "Is your B2B SaaS company struggling with data silos? Unified RevOps automation might be the solution"
+      },
+      {
+        "id": "6aef2aab-4b60-4d91-800c-46fd9603f9c3",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "2b07d79a-94ce-46a2-b7be-919cf268f409",
+        "body_preview": "Data silos holding back your SaaS growth? Unified RevOps automation integrates sales, marketing, and"
+      },
+      {
+        "id": "1159781e-8f48-49ad-8509-a2ecf9ef4a2f",
+        "channel": "newsletter",
+        "status": "draft",
+        "package_id": "2b07d79a-94ce-46a2-b7be-919cf268f409",
+        "body_preview": "Hello there,\n\nIn the fast-paced world of B2B SaaS, data silos can be a significant roadblock to grow"
+      },
+      {
+        "id": "94180175-4e0a-405a-ac2f-075b418abb52",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "8a9ed8c4-b904-4be3-828b-c6177e743c28",
+        "body_preview": "Is your RevOps team truly unified? \ud83e\udd14\n\nIn the fast-paced world of B2B SaaS, data silos can be a major"
+      },
+      {
+        "id": "9f3b8209-5899-49d7-9b34-d4713dd26255",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "8a9ed8c4-b904-4be3-828b-c6177e743c28",
+        "body_preview": "RevOps success = Unified teams. Break data silos, align goals, and streamline communication across s"
+      },
+      {
+        "id": "281f8401-43d3-422a-b3bf-f218bcdbd26b",
+        "channel": "newsletter",
+        "status": "draft",
+        "package_id": "8a9ed8c4-b904-4be3-828b-c6177e743c28",
+        "body_preview": "Hello,\n\nIn the world of B2B SaaS, the key to driving predictable growth lies in the strength of your"
+      },
+      {
+        "id": "171a378b-13ec-41be-95d7-40f64e43bfe3",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "4769326f-d76e-4f24-ade8-1fd1f4676dc4",
+        "body_preview": "Is your B2B SaaS company struggling to align sales and marketing? RevOps might be the missing link. "
+      },
+      {
+        "id": "eee01702-d238-448d-97c8-ef4c71d1014f",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "4769326f-d76e-4f24-ade8-1fd1f4676dc4",
+        "body_preview": "RevOps is the key to aligning sales & marketing in B2B SaaS. Break down data silos, unify goals, and"
+      },
+      {
+        "id": "9af05451-96b8-4800-a3e4-682d0eeb2dd7",
+        "channel": "newsletter",
+        "status": "draft",
+        "package_id": "4769326f-d76e-4f24-ade8-1fd1f4676dc4",
+        "body_preview": "Hello there,\n\nIn the fast-paced world of B2B SaaS, aligning sales and marketing is no longer a luxur"
+      }
+    ],
+    "warnings": []
+  },
+  "errors": []
+}

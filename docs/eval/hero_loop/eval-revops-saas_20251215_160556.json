@@ -1,0 +1,38 @@
+{
+  "run_id": "368f760f-36d6-47b9-b642-a243a891cdce",
+  "brand_slug": "eval-revops-saas",
+  "timestamp": "2025-12-15T16:05:56.078802+00:00",
+  "llm_disabled": false,
+  "status": "failed",
+  "stage_status": {
+    "f1_status": "failed",
+    "f2_status": "failed",
+    "failure_reason": "f1_exception:IntegrityError",
+    "is_structurally_valid": false
+  },
+  "quality_labels": {
+    "f1_label": null,
+    "f2_label": null,
+    "run_label": "invalid"
+  },
+  "metrics": {
+    "opportunity_count": 0,
+    "valid_opportunity_count": 0,
+    "package_count": 0,
+    "variant_count": 0,
+    "taboo_violations": 0,
+    "f1_status": "failed",
+    "f2_status": "failed"
+  },
+  "case": {
+    "eval_brand_id": "eval_brand_revops_saas",
+    "brand_name": "RevOps Intelligence",
+    "opportunities": [],
+    "packages": [],
+    "variants": [],
+    "warnings": []
+  },
+  "errors": [
+    "Stage failure: f1_exception:IntegrityError"
+  ]
+}

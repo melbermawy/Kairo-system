@@ -26,6 +26,7 @@ from kairo.hero.llm_client import (
     LLMConfig,
     LLMResponse,
     StructuredOutputError,
+    _is_responses_api_model,
     load_config_from_env,
     parse_structured_output,
     reset_default_client,
@@ -117,8 +118,8 @@ class TestLLMConfig:
         """Config has sensible defaults."""
         config = LLMConfig()
 
-        assert config.fast_model_name == "gpt-4.1-mini"
-        assert config.heavy_model_name == "gpt-5.1-thinking"
+        assert config.fast_model_name == "gpt-5-nano"
+        assert config.heavy_model_name == "gpt-5-pro"
         assert config.llm_disabled is False
         assert config.timeout_fast == 8.0
         assert config.timeout_heavy == 20.0
@@ -149,7 +150,7 @@ class TestLLMConfig:
             config.fast_model_name = "different-model"  # type: ignore
 
     def test_load_config_no_env_vars(self, monkeypatch):
-        """Load config with no env vars set uses test defaults."""
+        """Load config with no env vars set uses spec defaults."""
         # Clear relevant env vars
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("KAIRO_LLM_MODEL_FAST", raising=False)
@@ -158,9 +159,9 @@ class TestLLMConfig:
 
         config = load_config_from_env()
 
-        # Should use test defaults when no API key
-        assert config.fast_model_name == "test-fast-model"
-        assert config.heavy_model_name == "test-heavy-model"
+        # Per spec: use default model names regardless of API key
+        assert config.fast_model_name == "gpt-5-nano"
+        assert config.heavy_model_name == "gpt-5-pro"
         assert config.api_key is None
         assert config.llm_disabled is False
 
@@ -609,6 +610,8 @@ class TestCostEstimation:
 
     def test_cost_with_custom_rates_from_env(self, sample_brand_id, monkeypatch):
         """Cost estimation uses rates from environment variables."""
+        # Must explicitly disable LLM_DISABLED to use mocked provider
+        monkeypatch.delenv("LLM_DISABLED", raising=False)
         monkeypatch.setenv("KAIRO_LLM_COST_FAST_USD_PER_1K", "0.005")
         monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
@@ -640,7 +643,7 @@ class TestLLMDisabled:
     """Tests for LLM_DISABLED behavior."""
 
     def test_disabled_returns_stub_response(self, sample_brand_id):
-        """LLM_DISABLED returns deterministic stub response."""
+        """LLM_DISABLED returns deterministic stub response with valid JSON."""
         config = LLMConfig(llm_disabled=True, fast_model_name="disabled-model")
         client = LLMClient(config=config)
 
@@ -659,11 +662,59 @@ class TestLLMDisabled:
         # Provider should not have been called
         mock_provider.assert_not_called()
 
-        # Response should be a stub
+        # Response should be a stub with valid JSON
         assert response.status == "disabled"
-        assert response.raw_text.startswith("[LLM_DISABLED STUB]")
-        assert "Generate opportunities" in response.raw_text
+        # Stub returns valid JSON that can be parsed
+        import json
+        parsed = json.loads(response.raw_text)
+        assert isinstance(parsed, dict)
         assert response.model == "disabled-model"
+
+    def test_disabled_returns_flow_specific_stub(self, sample_brand_id):
+        """LLM_DISABLED returns flow-specific stub JSON that matches expected schema."""
+        config = LLMConfig(llm_disabled=True)
+        client = LLMClient(config=config)
+
+        # Test synthesis flow
+        synthesis_response = client.call(
+            brand_id=sample_brand_id,
+            flow="F1_opportunities_synthesis",
+            prompt="Generate opportunities",
+        )
+        import json
+        parsed = json.loads(synthesis_response.raw_text)
+        assert "opportunities" in parsed
+        assert len(parsed["opportunities"]) >= 6  # min_length per schema
+
+        # Test scoring flow - uses minimal schema now
+        scoring_response = client.call(
+            brand_id=sample_brand_id,
+            flow="F1_opportunities_scoring",
+            prompt="Score opportunities",
+        )
+        parsed = json.loads(scoring_response.raw_text)
+        assert "scores" in parsed  # New minimal schema uses "scores" array
+        assert all("score" in item and "idx" in item for item in parsed["scores"])
+
+        # Test package flow
+        package_response = client.call(
+            brand_id=sample_brand_id,
+            flow="F2_package",
+            prompt="Create package",
+        )
+        parsed = json.loads(package_response.raw_text)
+        assert "package" in parsed
+        assert "thesis" in parsed["package"]
+
+        # Test variants flow
+        variants_response = client.call(
+            brand_id=sample_brand_id,
+            flow="F2_variants",
+            prompt="Generate variants",
+        )
+        parsed = json.loads(variants_response.raw_text)
+        assert "variants" in parsed
+        assert len(parsed["variants"]) >= 1
 
     def test_disabled_includes_cost_estimate(self, sample_brand_id):
         """LLM_DISABLED stub response includes cost estimate."""
@@ -962,7 +1013,7 @@ class TestLLMResponse:
         """LLMResponse has all expected fields."""
         response = LLMResponse(
             raw_text="Hello",
-            model="gpt-4.1-mini",
+            model="gpt-5-nano",
             usage_tokens_in=10,
             usage_tokens_out=20,
             latency_ms=150,
@@ -972,7 +1023,7 @@ class TestLLMResponse:
         )
 
         assert response.raw_text == "Hello"
-        assert response.model == "gpt-4.1-mini"
+        assert response.model == "gpt-5-nano"
         assert response.usage_tokens_in == 10
         assert response.usage_tokens_out == 20
         assert response.latency_ms == 150
@@ -1055,16 +1106,17 @@ class TestLLMClientIntegration:
 
         assert response.status == "disabled"
 
-    def test_model_names_in_test_env(self, monkeypatch):
-        """Test environment uses test model names when no API key."""
+    def test_model_names_defaults(self, monkeypatch):
+        """Default model names per spec: gpt-5-nano (fast), gpt-5-pro (heavy)."""
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("KAIRO_LLM_MODEL_FAST", raising=False)
         monkeypatch.delenv("KAIRO_LLM_MODEL_HEAVY", raising=False)
 
         config = load_config_from_env()
 
-        assert config.fast_model_name == "test-fast-model"
-        assert config.heavy_model_name == "test-heavy-model"
+        # Per spec: default model names regardless of API key presence
+        assert config.fast_model_name == "gpt-5-nano"
+        assert config.heavy_model_name == "gpt-5-pro"
 
     def test_env_overrides_model_names_even_without_api_key(self, monkeypatch):
         """Explicit model names override test defaults even without API key."""
@@ -1076,3 +1128,169 @@ class TestLLMClientIntegration:
 
         assert config.fast_model_name == "explicit-fast"
         assert config.heavy_model_name == "explicit-heavy"
+
+
+# =============================================================================
+# API ROUTING TESTS (Responses API vs Chat Completions)
+# =============================================================================
+
+
+class TestAPIRouting:
+    """Tests for API routing based on model name (PR-7.1).
+
+    GPT-5.x models use Responses API; older models use Chat Completions API.
+    """
+
+    def test_is_responses_api_model_gpt5_nano(self):
+        """gpt-5-nano should use Responses API."""
+        assert _is_responses_api_model("gpt-5-nano") is True
+
+    def test_is_responses_api_model_gpt5_pro(self):
+        """gpt-5-pro should use Responses API."""
+        assert _is_responses_api_model("gpt-5-pro") is True
+
+    def test_is_responses_api_model_gpt5_mini(self):
+        """gpt-5-mini should use Responses API."""
+        assert _is_responses_api_model("gpt-5-mini") is True
+
+    def test_is_responses_api_model_gpt5_base(self):
+        """gpt-5 (base) should use Responses API."""
+        assert _is_responses_api_model("gpt-5") is True
+
+    def test_is_responses_api_model_gpt51(self):
+        """gpt-5.1 should use Responses API."""
+        assert _is_responses_api_model("gpt-5.1") is True
+
+    def test_is_responses_api_model_gpt51_mini(self):
+        """gpt-5.1-mini should use Responses API."""
+        assert _is_responses_api_model("gpt-5.1-mini") is True
+
+    def test_is_responses_api_model_gpt4o_false(self):
+        """gpt-4o should NOT use Responses API (uses Chat Completions)."""
+        assert _is_responses_api_model("gpt-4o") is False
+
+    def test_is_responses_api_model_gpt4o_mini_false(self):
+        """gpt-4o-mini should NOT use Responses API."""
+        assert _is_responses_api_model("gpt-4o-mini") is False
+
+    def test_is_responses_api_model_gpt35_turbo_false(self):
+        """gpt-3.5-turbo should NOT use Responses API."""
+        assert _is_responses_api_model("gpt-3.5-turbo") is False
+
+    def test_is_responses_api_model_case_insensitive(self):
+        """Model name detection should be case-insensitive."""
+        assert _is_responses_api_model("GPT-5-NANO") is True
+        assert _is_responses_api_model("Gpt-5-Pro") is True
+
+    def test_gpt5_model_routes_to_responses_api(self, sample_brand_id):
+        """GPT-5 model should route to _call_responses_api."""
+        config = LLMConfig(
+            api_key="test-key",
+            fast_model_name="gpt-5-nano",
+        )
+        client = LLMClient(config=config)
+
+        with patch.object(client, "_call_responses_api") as mock_responses, \
+             patch.object(client, "_call_chat_completions_api") as mock_chat:
+            mock_responses.return_value = {
+                "content": "response",
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+            }
+
+            client.call(
+                brand_id=sample_brand_id,
+                flow="F1_today",
+                prompt="test",
+                role="fast",
+            )
+
+        mock_responses.assert_called_once()
+        mock_chat.assert_not_called()
+
+    def test_gpt4_model_routes_to_chat_completions(self, sample_brand_id):
+        """GPT-4 model should route to _call_chat_completions_api."""
+        config = LLMConfig(
+            api_key="test-key",
+            fast_model_name="gpt-4o-mini",
+        )
+        client = LLMClient(config=config)
+
+        with patch.object(client, "_call_responses_api") as mock_responses, \
+             patch.object(client, "_call_chat_completions_api") as mock_chat:
+            mock_chat.return_value = {
+                "content": "response",
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+            }
+
+            client.call(
+                brand_id=sample_brand_id,
+                flow="F1_today",
+                prompt="test",
+                role="fast",
+            )
+
+        mock_chat.assert_called_once()
+        mock_responses.assert_not_called()
+
+    def test_responses_api_uses_correct_params(self, sample_brand_id):
+        """Responses API call uses correct parameter names (input, instructions, max_output_tokens)."""
+        config = LLMConfig(
+            api_key="test-key",
+            fast_model_name="gpt-5-nano",
+            max_tokens_fast=512,
+            temperature_fast=0.1,
+            top_p_fast=0.9,
+        )
+        client = LLMClient(config=config)
+
+        with patch.object(client, "_call_responses_api") as mock_responses:
+            mock_responses.return_value = {
+                "content": "response",
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+            }
+
+            client.call(
+                brand_id=sample_brand_id,
+                flow="F1_today",
+                prompt="user prompt",
+                system_prompt="system instructions",
+                role="fast",
+            )
+
+        call_kwargs = mock_responses.call_args.kwargs
+        assert call_kwargs["model"] == "gpt-5-nano"
+        assert call_kwargs["prompt"] == "user prompt"
+        assert call_kwargs["system_prompt"] == "system instructions"
+        assert call_kwargs["max_tokens"] == 512
+        assert call_kwargs["temperature"] == 0.1
+        assert call_kwargs["top_p"] == 0.9
+
+    def test_chat_completions_not_used_for_gpt5_pro(self, sample_brand_id):
+        """Regression: Chat Completions API must NOT be used for gpt-5-pro."""
+        config = LLMConfig(
+            api_key="test-key",
+            heavy_model_name="gpt-5-pro",
+        )
+        client = LLMClient(config=config)
+
+        with patch.object(client, "_call_responses_api") as mock_responses, \
+             patch.object(client, "_call_chat_completions_api") as mock_chat:
+            mock_responses.return_value = {
+                "content": "response",
+                "usage": {"prompt_tokens": 50, "completion_tokens": 100},
+            }
+
+            client.call(
+                brand_id=sample_brand_id,
+                flow="F2_package",
+                prompt="test",
+                role="heavy",
+            )
+
+        # Chat completions must NOT be called for gpt-5-pro
+        mock_chat.assert_not_called()
+        # Responses API must be called
+        mock_responses.assert_called_once()
+        # Verify model passed correctly
+        call_kwargs = mock_responses.call_args.kwargs
+        assert call_kwargs["model"] == "gpt-5-pro"

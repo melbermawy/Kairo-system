@@ -40,10 +40,11 @@ class Command(BaseCommand):
     help = "Run the hero loop eval for a brand (F1 + F2 flows)"
 
     def add_arguments(self, parser):
+        # 10b: --brand-slug is not required when --list-brands is used
         parser.add_argument(
             "--brand-slug",
             type=str,
-            required=True,
+            required=False,  # Will validate manually
             help="Slug of the brand to evaluate (from fixtures)",
         )
         parser.add_argument(
@@ -72,12 +73,18 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        # Handle --list-brands
+        # Handle --list-brands (doesn't require --brand-slug)
         if options["list_brands"]:
             self._list_brands()
             return
 
-        brand_slug = options["brand_slug"]
+        # 10b: Validate --brand-slug is provided if not listing brands
+        brand_slug = options.get("brand_slug")
+        if not brand_slug:
+            raise CommandError(
+                "--brand-slug is required when not using --list-brands\n"
+                "Use --list-brands to see available brand slugs"
+            )
         llm_enabled = options["llm_enabled"]
         max_opportunities = options["max_opportunities"]
         output_dir_str = options["output_dir"]
@@ -113,8 +120,8 @@ class Command(BaseCommand):
         # Report results
         self._report_results(result)
 
-        # Exit with error if eval failed
-        if result.status == "error":
+        # 10b: Exit with error if eval failed or had stage failures
+        if result.status in ("error", "failed"):
             raise CommandError(f"Eval failed: {'; '.join(result.errors)}")
 
     def _list_brands(self):
@@ -162,6 +169,18 @@ class Command(BaseCommand):
         # Per-case summary
         for case in result.cases:
             self.stdout.write(f"CASE: {case.eval_brand_id}")
+
+            # 10b: Show stage status prominently
+            stage = case.stage_status
+            f1_emoji = {"ok": "✅", "degraded": "⚠️", "failed": "❌"}.get(stage.f1_status, "?")
+            f2_emoji = {"ok": "✅", "degraded": "⚠️", "failed": "❌"}.get(stage.f2_status, "?")
+            self.stdout.write(f"  Stage Status:")
+            self.stdout.write(f"    F1 (Opportunities): {f1_emoji} {stage.f1_status}")
+            self.stdout.write(f"    F2 (Packages/Variants): {f2_emoji} {stage.f2_status}")
+            if stage.failure_reason:
+                self.stdout.write(f"    Failure reason: {stage.failure_reason}")
+            self.stdout.write(f"    Structurally valid: {stage.is_structurally_valid()}")
+
             self.stdout.write(f"  Opportunities: {case.opportunity_count} ({case.valid_opportunity_count} valid)")
             self.stdout.write(f"  Packages: {case.package_count}")
             self.stdout.write(f"  Variants: {case.variant_count}")

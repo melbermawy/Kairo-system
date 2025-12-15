@@ -1,0 +1,129 @@
+{
+  "run_id": "db00d80e-2eb3-4182-b202-8a3e46762761",
+  "brand_slug": "eval-revops-saas",
+  "timestamp": "2025-12-13T19:16:58.771297+00:00",
+  "llm_disabled": false,
+  "status": "degraded",
+  "stage_status": {
+    "f1_status": "degraded",
+    "f2_status": "degraded",
+    "failure_reason": "graph_error",
+    "is_structurally_valid": true
+  },
+  "quality_labels": {
+    "f1_label": "bad",
+    "f2_label": "partial",
+    "run_label": "bad"
+  },
+  "metrics": {
+    "opportunity_count": 6,
+    "valid_opportunity_count": 6,
+    "package_count": 1,
+    "variant_count": 3,
+    "taboo_violations": 0,
+    "f1_status": "degraded",
+    "f2_status": "degraded",
+    "opportunity_coverage": 0.0,
+    "avg_opportunity_score": 68.33333333333333,
+    "golden_match_count": 0
+  },
+  "case": {
+    "eval_brand_id": "eval_brand_revops_saas",
+    "brand_name": "RevOps Intelligence",
+    "opportunities": [
+      {
+        "id": "65798bd0-4833-552f-a485-410b58848e54",
+        "title": "Industry trend: AI adoption in RevOps Intelligence's sector",
+        "angle": "Rising discussion about AI tools - opportunity to share our perspective on practical implementation.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 75.0,
+        "is_valid": true
+      },
+      {
+        "id": "08931351-9816-5866-b627-f448816cf036",
+        "title": "Weekly thought leadership post",
+        "angle": "Regular cadence content about our core expertise area.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 72.0,
+        "is_valid": true
+      },
+      {
+        "id": "8ba2f2c7-f9e3-5a61-94a8-858f55090c40",
+        "title": "Customer success story",
+        "angle": "Recent customer achieved notable results - great case study material.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 70.0,
+        "is_valid": true
+      },
+      {
+        "id": "4f7741e8-b9c8-5a85-a634-ac0eb82a2c44",
+        "title": "Competitor announcement response",
+        "angle": "Competitor just announced a feature - opportunity to differentiate our approach.",
+        "type": "competitive",
+        "primary_channel": "x",
+        "score": 68.0,
+        "is_valid": true
+      },
+      {
+        "id": "3eae3767-6643-5a2a-8c54-136d57718329",
+        "title": "Industry report commentary",
+        "angle": "New industry report released - can provide contrarian take aligned with our positioning.",
+        "type": "trend",
+        "primary_channel": "x",
+        "score": 65.0,
+        "is_valid": true
+      },
+      {
+        "id": "8e5dbe91-fd26-5ba4-be42-f48946ff29dd",
+        "title": "Behind the scenes: Product development",
+        "angle": "Authenticity content showing how we build - builds trust with audience.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 60.0,
+        "is_valid": true
+      }
+    ],
+    "packages": [
+      {
+        "id": "da50e1e2-8f8a-4588-8b1a-265c4d0e070b",
+        "title": "Practical AI Implementation in RevOps: Beyond the Hype",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "65798bd0-4833-552f-a485-410b58848e54"
+      }
+    ],
+    "variants": [
+      {
+        "id": "7a2f594c-f4f8-4d62-a42f-bdccfa3f8b9c",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "da50e1e2-8f8a-4588-8b1a-265c4d0e070b",
+        "body_preview": "AI in RevOps: It's not about the latest trend, but about effective implementation. \n\nIn the world of"
+      },
+      {
+        "id": "30c38e9c-5bd8-477b-9e76-1eca7f6d2449",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "da50e1e2-8f8a-4588-8b1a-265c4d0e070b",
+        "body_preview": "AI in RevOps isn't about trends\u2014it's about integration. Break data silos, automate processes, and dr"
+      },
+      {
+        "id": "53033f63-2566-41f0-a394-f02f98f18d7d",
+        "channel": "newsletter",
+        "status": "draft",
+        "package_id": "da50e1e2-8f8a-4588-8b1a-265c4d0e070b",
+        "body_preview": "Hello,\n\nIn the fast-paced world of B2B SaaS, AI is often touted as the silver bullet for all RevOps "
+      }
+    ],
+    "warnings": [
+      "Error processing opportunity 08931351-9816-5866-b627-f448816cf036: Package failed rubric validation: thesis doesn't clearly link to opportunity (\u00a75.6)"
+    ]
+  },
+  "errors": []
+}

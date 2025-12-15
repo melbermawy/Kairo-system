@@ -32,6 +32,8 @@ from kairo.hero.dto import (
 )
 from kairo.hero.graphs.opportunities_graph import (
     GraphError,
+    MinimalScoringItem,
+    MinimalScoringOutput,
     RawOpportunityIdea,
     ScoredOpportunity,
     ScoringOutput,
@@ -143,6 +145,7 @@ def fake_synthesis_output():
                 suggested_channels=["linkedin", "x"],
                 reasoning="Strong alignment with thought leadership pillar",
                 source="linkedin_trending",
+                why_now="Recent AI announcements from major tech companies make this timely.",
             ),
             RawOpportunityIdea(
                 title="Weekly Leadership Insights",
@@ -151,6 +154,7 @@ def fake_synthesis_output():
                 primary_channel="linkedin",
                 suggested_channels=["linkedin"],
                 reasoning="Consistent pillar coverage",
+                why_now="Q4 planning season creates demand for leadership perspectives.",
             ),
             RawOpportunityIdea(
                 title="Quick Tips for Marketing Efficiency",
@@ -159,6 +163,7 @@ def fake_synthesis_output():
                 primary_channel="x",
                 suggested_channels=["x"],
                 reasoning="Good for X engagement",
+                why_now="Budget constraints in current market drive efficiency focus.",
             ),
             RawOpportunityIdea(
                 title="Industry Report Deep Dive",
@@ -167,6 +172,7 @@ def fake_synthesis_output():
                 primary_channel="linkedin",
                 suggested_channels=["linkedin", "x"],
                 reasoning="Timely content opportunity",
+                why_now="New Forrester report released this week sparks discussion.",
             ),
             RawOpportunityIdea(
                 title="Customer Success Spotlight",
@@ -175,6 +181,7 @@ def fake_synthesis_output():
                 primary_channel="linkedin",
                 suggested_channels=["linkedin"],
                 reasoning="Social proof content",
+                why_now="Customer just hit major milestone worth celebrating publicly.",
             ),
             RawOpportunityIdea(
                 title="Differentiation Point: Our Unique Approach",
@@ -183,6 +190,7 @@ def fake_synthesis_output():
                 primary_channel="x",
                 suggested_channels=["x", "linkedin"],
                 reasoning="Competitive positioning",
+                why_now="Competitor announcement yesterday creates differentiation opportunity.",
             ),
         ]
     )
@@ -190,63 +198,15 @@ def fake_synthesis_output():
 
 @pytest.fixture
 def fake_scoring_output():
-    """Fake LLM output for scoring node."""
-    return ScoringOutput(
-        opportunities=[
-            ScoredOpportunity(
-                title="AI Marketing Trends: What CMOs Need to Know",
-                angle="Emerging AI tools are transforming how marketing teams work. Share insights on practical adoption.",
-                type="trend",
-                primary_channel="linkedin",
-                suggested_channels=["linkedin", "x"],
-                score=88.0,
-                score_explanation="High relevance and timeliness",
-            ),
-            ScoredOpportunity(
-                title="Weekly Leadership Insights",
-                angle="Regular thought leadership content showcasing expertise.",
-                type="evergreen",
-                primary_channel="linkedin",
-                suggested_channels=["linkedin"],
-                score=75.0,
-                score_explanation="Strong pillar alignment",
-            ),
-            ScoredOpportunity(
-                title="Quick Tips for Marketing Efficiency",
-                angle="Tactical advice thread format for engagement.",
-                type="evergreen",
-                primary_channel="x",
-                suggested_channels=["x"],
-                score=72.0,
-                score_explanation="Good engagement format",
-            ),
-            ScoredOpportunity(
-                title="Industry Report Deep Dive",
-                angle="Analysis of recent industry report with contrarian take.",
-                type="trend",
-                primary_channel="linkedin",
-                suggested_channels=["linkedin", "x"],
-                score=80.0,
-                score_explanation="Timely and relevant",
-            ),
-            ScoredOpportunity(
-                title="Customer Success Spotlight",
-                angle="Share customer achievement as case study.",
-                type="evergreen",
-                primary_channel="linkedin",
-                suggested_channels=["linkedin"],
-                score=70.0,
-                score_explanation="Solid social proof",
-            ),
-            ScoredOpportunity(
-                title="Differentiation Point: Our Unique Approach",
-                angle="Contrast our approach with market standard.",
-                type="competitive",
-                primary_channel="x",
-                suggested_channels=["x", "linkedin"],
-                score=68.0,
-                score_explanation="Clear differentiation",
-            ),
+    """Fake LLM output for scoring node - uses new minimal schema."""
+    return MinimalScoringOutput(
+        scores=[
+            MinimalScoringItem(idx=0, score=88, band="strong", reason="High relevance"),
+            MinimalScoringItem(idx=1, score=75, band="strong", reason="Strong pillar alignment"),
+            MinimalScoringItem(idx=2, score=72, band="strong", reason="Good engagement format"),
+            MinimalScoringItem(idx=3, score=80, band="strong", reason="Timely and relevant"),
+            MinimalScoringItem(idx=4, score=70, band="strong", reason="Solid social proof"),
+            MinimalScoringItem(idx=5, score=68, band="strong", reason="Clear differentiation"),
         ]
     )
 
@@ -264,6 +224,7 @@ def create_fake_llm_client(synthesis_output, scoring_output):
         tools=None,
         system_prompt=None,
         max_output_tokens=None,
+        temperature=None,  # New parameter
         run_id=None,
         trigger_source="api",
     ):
@@ -272,6 +233,7 @@ def create_fake_llm_client(synthesis_output, scoring_output):
         if "synthesis" in flow.lower():
             output_json = synthesis_output.model_dump_json()
         else:
+            # Scoring now uses minimal schema
             output_json = scoring_output.model_dump_json()
 
         return LLMResponse(
@@ -873,23 +835,30 @@ class TestLLMClientIsolation:
         sample_learning_summary,
         sample_external_signals,
     ):
-        """With LLM_DISABLED, real calls are not made."""
+        """With LLM_DISABLED, real calls are not made and stub JSON is returned."""
         # Create a client with LLM_DISABLED
         config = LLMConfig(llm_disabled=True)
         client = LLMClient(config=config)
 
         # This would fail if it tried to make real calls (no API key)
-        # But with disabled mode, it returns stub responses
-        # However, the stub response won't have valid JSON for our schema
-        # So we expect a GraphError
-        with pytest.raises(GraphError):
-            graph_hero_generate_opportunities(
-                run_id=sample_run_id,
-                brand_snapshot=sample_brand_snapshot,
-                learning_summary=sample_learning_summary,
-                external_signals=sample_external_signals,
-                llm_client=client,
-            )
+        # But with disabled mode, it returns valid stub JSON that matches the schema
+        # So the graph should complete successfully
+        result = graph_hero_generate_opportunities(
+            run_id=sample_run_id,
+            brand_snapshot=sample_brand_snapshot,
+            learning_summary=sample_learning_summary,
+            external_signals=sample_external_signals,
+            llm_client=client,
+        )
+
+        # Verify stub opportunities were returned
+        assert len(result) >= 6  # Min per schema
+        assert all(isinstance(opp, OpportunityDraftDTO) for opp in result)
+        # Verify all have valid fields
+        for opp in result:
+            assert opp.proposed_title
+            assert opp.proposed_angle
+            assert opp.score >= 0
 
 
 # =============================================================================
@@ -1054,6 +1023,35 @@ class TestOpportunityValidity:
         assert len(result[0].rejection_reasons) >= 4  # Multiple issues
 
 
+class TestScoringOutputParsing:
+    """Tests for scoring output parsing, including real LLM failure cases."""
+
+    def test_broken_scoring_response_fails_to_parse(self):
+        """
+        Demonstrate that truncated LLM scoring output fails to parse.
+
+        This test uses a real LLM response that was captured during eval.
+        The response is truncated (JSON incomplete) which causes parse failure.
+        """
+        from kairo.hero.llm_client import parse_structured_output, StructuredOutputError
+        import os
+
+        # Load the broken response fixture
+        fixture_path = os.path.join(
+            os.path.dirname(__file__),
+            "fixtures/llm/scoring_broken_example.txt"
+        )
+        with open(fixture_path, "r") as f:
+            broken_response = f.read()
+
+        # This should fail with StructuredOutputError due to invalid/truncated JSON
+        with pytest.raises(StructuredOutputError) as exc_info:
+            parse_structured_output(broken_response, ScoringOutput)
+
+        # Verify the error message indicates JSON parsing failure
+        assert "Invalid JSON" in str(exc_info.value)
+
+
 class TestNormalGraphRunValidity:
     """Tests ensuring normal graph runs produce valid opportunities."""
 
@@ -1067,10 +1065,7 @@ class TestNormalGraphRunValidity:
         fake_scoring_output,
     ):
         """For typical inputs, all returned opps should be valid."""
-        # Update fake scoring output to include why_now
-        for opp in fake_scoring_output.opportunities:
-            opp.why_now = "This is timely due to recent market trends and customer needs."
-
+        # why_now is now included in fake_synthesis_output fixture
         fake_client = create_fake_llm_client(fake_synthesis_output, fake_scoring_output)
 
         result = graph_hero_generate_opportunities(
@@ -1096,10 +1091,7 @@ class TestNormalGraphRunValidity:
         fake_scoring_output,
     ):
         """For typical inputs, scores should be in [60, 95] range."""
-        # Update fake scoring output to include why_now
-        for opp in fake_scoring_output.opportunities:
-            opp.why_now = "This is timely due to recent market trends."
-
+        # why_now is now included in fake_synthesis_output fixture
         fake_client = create_fake_llm_client(fake_synthesis_output, fake_scoring_output)
 
         result = graph_hero_generate_opportunities(
@@ -1113,3 +1105,270 @@ class TestNormalGraphRunValidity:
         for draft in result:
             if draft.is_valid:
                 assert 60 <= draft.score <= 95, f"Score {draft.score} not in expected range"
+
+
+# =============================================================================
+# TOLERANT PARSING TESTS
+# =============================================================================
+
+
+class TestTolerantParsing:
+    """Tests for per-item tolerant parsing in scoring step."""
+
+    def test_partial_malformed_scores_still_succeeds(
+        self,
+        sample_run_id,
+        sample_brand_snapshot,
+        sample_learning_summary,
+        sample_external_signals,
+        fake_synthesis_output,
+    ):
+        """
+        When exactly one scoring item is malformed but others are fine,
+        F1 run stays ok and the malformed item becomes invalid with score=0.
+
+        The opportunity at index 2 (Quick Tips for Marketing Efficiency) won't
+        have a scoring entry because the item at array position 2 is malformed.
+        """
+        # Create scoring output with one malformed item at array position 2
+        # This means opportunity at idx=2 won't have a valid score
+        scoring_json = json.dumps({
+            "scores": [
+                {"idx": 0, "score": 88, "band": "strong", "reason": "Good"},
+                {"idx": 1, "score": 75, "band": "strong", "reason": "OK"},
+                {"idx": 2, "score": "invalid_score"},  # Malformed - will fail validation
+                {"idx": 3, "score": 80, "band": "strong", "reason": "Timely"},
+                {"idx": 4, "score": 70, "band": "strong", "reason": "Solid"},
+                {"idx": 5, "score": 68, "band": "strong", "reason": "Clear"},
+            ]
+        })
+
+        def fake_call(*, brand_id, flow, prompt, role="fast", tools=None,
+                      system_prompt=None, max_output_tokens=None, temperature=None,
+                      run_id=None, trigger_source="api"):
+            if "synthesis" in flow.lower():
+                return LLMResponse(
+                    raw_text=fake_synthesis_output.model_dump_json(),
+                    model="test-model",
+                    usage_tokens_in=100,
+                    usage_tokens_out=200,
+                    latency_ms=50,
+                    role=role,
+                    status="success",
+                )
+            else:
+                return LLMResponse(
+                    raw_text=scoring_json,
+                    model="test-model",
+                    usage_tokens_in=100,
+                    usage_tokens_out=200,
+                    latency_ms=50,
+                    role=role,
+                    status="success",
+                )
+
+        client = MagicMock(spec=LLMClient)
+        client.call = MagicMock(side_effect=fake_call)
+
+        # Graph should succeed, not raise GraphError
+        result = graph_hero_generate_opportunities(
+            run_id=sample_run_id,
+            brand_snapshot=sample_brand_snapshot,
+            learning_summary=sample_learning_summary,
+            external_signals=sample_external_signals,
+            llm_client=client,
+        )
+
+        # Should have all 6 opportunities
+        assert len(result) == 6
+
+        # Find the invalid opportunity (should have score=0)
+        invalid_opps = [r for r in result if r.score == 0.0]
+        assert len(invalid_opps) == 1, f"Expected 1 invalid opp, got {len(invalid_opps)}"
+
+        invalid_opp = invalid_opps[0]
+        assert invalid_opp.is_valid is False
+        # The score_explanation should contain schema mismatch info
+        assert "scoring_schema_mismatch" in invalid_opp.score_explanation
+
+        # Other items should have their scores
+        valid_opps = [r for r in result if r.score > 0]
+        assert len(valid_opps) == 5
+
+    def test_all_malformed_scores_raises_graph_error(
+        self,
+        sample_run_id,
+        sample_brand_snapshot,
+        sample_learning_summary,
+        sample_external_signals,
+        fake_synthesis_output,
+    ):
+        """
+        When all scoring items are malformed, graph raises GraphError
+        and f1_status becomes degraded.
+        """
+        # All items malformed - missing required fields
+        scoring_json = json.dumps({
+            "scores": [
+                {"bad_field": "junk"},
+                {"another_bad": 123},
+                {"totally": "wrong"},
+                {"not": "valid"},
+                {"missing": "everything"},
+                {"garbage": True},
+            ]
+        })
+
+        def fake_call(*, brand_id, flow, prompt, role="fast", tools=None,
+                      system_prompt=None, max_output_tokens=None, temperature=None,
+                      run_id=None, trigger_source="api"):
+            if "synthesis" in flow.lower():
+                return LLMResponse(
+                    raw_text=fake_synthesis_output.model_dump_json(),
+                    model="test-model",
+                    usage_tokens_in=100,
+                    usage_tokens_out=200,
+                    latency_ms=50,
+                    role=role,
+                    status="success",
+                )
+            else:
+                return LLMResponse(
+                    raw_text=scoring_json,
+                    model="test-model",
+                    usage_tokens_in=100,
+                    usage_tokens_out=200,
+                    latency_ms=50,
+                    role=role,
+                    status="success",
+                )
+
+        client = MagicMock(spec=LLMClient)
+        client.call = MagicMock(side_effect=fake_call)
+
+        # Should raise GraphError when all items fail
+        with pytest.raises(GraphError) as exc_info:
+            graph_hero_generate_opportunities(
+                run_id=sample_run_id,
+                brand_snapshot=sample_brand_snapshot,
+                learning_summary=sample_learning_summary,
+                external_signals=sample_external_signals,
+                llm_client=client,
+            )
+
+        assert "All" in str(exc_info.value) and "failed validation" in str(exc_info.value)
+
+    def test_truncated_json_raises_graph_error(
+        self,
+        sample_run_id,
+        sample_brand_snapshot,
+        sample_learning_summary,
+        sample_external_signals,
+        fake_synthesis_output,
+    ):
+        """
+        Truncated JSON (incomplete) raises GraphError with clear error.
+        """
+        # Truncated JSON - simulates LLM output cutoff
+        truncated_json = '{"scores": [{"idx": 0, "score": 88, "band": "str'
+
+        def fake_call(*, brand_id, flow, prompt, role="fast", tools=None,
+                      system_prompt=None, max_output_tokens=None, temperature=None,
+                      run_id=None, trigger_source="api"):
+            if "synthesis" in flow.lower():
+                return LLMResponse(
+                    raw_text=fake_synthesis_output.model_dump_json(),
+                    model="test-model",
+                    usage_tokens_in=100,
+                    usage_tokens_out=200,
+                    latency_ms=50,
+                    role=role,
+                    status="success",
+                )
+            else:
+                return LLMResponse(
+                    raw_text=truncated_json,
+                    model="test-model",
+                    usage_tokens_in=100,
+                    usage_tokens_out=200,
+                    latency_ms=50,
+                    role=role,
+                    status="success",
+                )
+
+        client = MagicMock(spec=LLMClient)
+        client.call = MagicMock(side_effect=fake_call)
+
+        with pytest.raises(GraphError) as exc_info:
+            graph_hero_generate_opportunities(
+                run_id=sample_run_id,
+                brand_snapshot=sample_brand_snapshot,
+                learning_summary=sample_learning_summary,
+                external_signals=sample_external_signals,
+                llm_client=client,
+            )
+
+        assert "JSON decode failed" in str(exc_info.value)
+
+    def test_scoring_call_uses_max_tokens_override(
+        self,
+        sample_run_id,
+        sample_brand_snapshot,
+        sample_learning_summary,
+        sample_external_signals,
+        fake_synthesis_output,
+        fake_scoring_output,
+    ):
+        """
+        Scoring LLM call should use explicit max_tokens override (1024).
+        """
+        from kairo.hero.graphs.opportunities_graph import SCORING_MAX_TOKENS
+
+        call_args = []
+
+        def fake_call(*, brand_id, flow, prompt, role="fast", tools=None,
+                      system_prompt=None, max_output_tokens=None, temperature=None,
+                      run_id=None, trigger_source="api"):
+            call_args.append({
+                "flow": flow,
+                "max_output_tokens": max_output_tokens,
+                "temperature": temperature,
+            })
+            if "synthesis" in flow.lower():
+                return LLMResponse(
+                    raw_text=fake_synthesis_output.model_dump_json(),
+                    model="test-model",
+                    usage_tokens_in=100,
+                    usage_tokens_out=200,
+                    latency_ms=50,
+                    role=role,
+                    status="success",
+                )
+            else:
+                return LLMResponse(
+                    raw_text=fake_scoring_output.model_dump_json(),
+                    model="test-model",
+                    usage_tokens_in=100,
+                    usage_tokens_out=200,
+                    latency_ms=50,
+                    role=role,
+                    status="success",
+                )
+
+        client = MagicMock(spec=LLMClient)
+        client.call = MagicMock(side_effect=fake_call)
+
+        graph_hero_generate_opportunities(
+            run_id=sample_run_id,
+            brand_snapshot=sample_brand_snapshot,
+            learning_summary=sample_learning_summary,
+            external_signals=sample_external_signals,
+            llm_client=client,
+        )
+
+        # Find the scoring call
+        scoring_call = next(c for c in call_args if "scoring" in c["flow"].lower())
+
+        # Verify explicit max_tokens and temperature overrides
+        assert scoring_call["max_output_tokens"] == SCORING_MAX_TOKENS
+        assert scoring_call["temperature"] == 0.0  # Deterministic

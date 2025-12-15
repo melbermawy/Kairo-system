@@ -514,7 +514,15 @@ def _generate_stub_opportunities(brand: Brand, run_id: UUID) -> list[Opportunity
     Generate deterministic stub opportunities as fallback.
 
     Used when graph fails and no existing opportunities are available.
-    Creates in-memory Opportunity instances (not persisted).
+
+    8c fix: Stubs are now PERSISTED to DB so that F2 (content engine) can
+    look them up by ID. This ensures degraded mode is structurally valid
+    end-to-end.
+
+    The stubs have:
+    - Deterministic IDs based on brand + index
+    - metadata.stub = True to identify them as fallback content
+    - metadata.degraded_run_id = run_id for tracking
     """
     now = datetime.now(timezone.utc)
 
@@ -523,6 +531,7 @@ def _generate_stub_opportunities(brand: Brand, run_id: UUID) -> list[Opportunity
         {
             "title": f"Industry trend: AI adoption in {brand.name}'s sector",
             "angle": "Rising discussion about AI tools - opportunity to share our perspective on practical implementation.",
+            "why_now": "AI adoption is accelerating across industries, making this a timely topic for thought leadership.",
             "type": OpportunityType.TREND,
             "channel": Channel.LINKEDIN,
             "score": 75.0,
@@ -530,6 +539,7 @@ def _generate_stub_opportunities(brand: Brand, run_id: UUID) -> list[Opportunity
         {
             "title": "Weekly thought leadership post",
             "angle": "Regular cadence content about our core expertise area.",
+            "why_now": "Consistent content builds audience trust and maintains visibility.",
             "type": OpportunityType.EVERGREEN,
             "channel": Channel.LINKEDIN,
             "score": 72.0,
@@ -537,6 +547,7 @@ def _generate_stub_opportunities(brand: Brand, run_id: UUID) -> list[Opportunity
         {
             "title": "Competitor announcement response",
             "angle": "Competitor just announced a feature - opportunity to differentiate our approach.",
+            "why_now": "Competitor activity creates a natural hook for differentiation content.",
             "type": OpportunityType.COMPETITIVE,
             "channel": Channel.X,
             "score": 68.0,
@@ -544,6 +555,7 @@ def _generate_stub_opportunities(brand: Brand, run_id: UUID) -> list[Opportunity
         {
             "title": "Customer success story",
             "angle": "Recent customer achieved notable results - great case study material.",
+            "why_now": "Fresh success stories resonate more and demonstrate current value.",
             "type": OpportunityType.EVERGREEN,
             "channel": Channel.LINKEDIN,
             "score": 70.0,
@@ -551,6 +563,7 @@ def _generate_stub_opportunities(brand: Brand, run_id: UUID) -> list[Opportunity
         {
             "title": "Industry report commentary",
             "angle": "New industry report released - can provide contrarian take aligned with our positioning.",
+            "why_now": "Industry reports generate discussion windows for expert commentary.",
             "type": OpportunityType.TREND,
             "channel": Channel.X,
             "score": 65.0,
@@ -558,6 +571,7 @@ def _generate_stub_opportunities(brand: Brand, run_id: UUID) -> list[Opportunity
         {
             "title": "Behind the scenes: Product development",
             "angle": "Authenticity content showing how we build - builds trust with audience.",
+            "why_now": "Transparency content consistently performs well for building brand trust.",
             "type": OpportunityType.EVERGREEN,
             "channel": Channel.LINKEDIN,
             "score": 60.0,
@@ -565,29 +579,56 @@ def _generate_stub_opportunities(brand: Brand, run_id: UUID) -> list[Opportunity
     ]
 
     opportunities = []
-    for i, template in enumerate(templates):
-        # Generate deterministic ID for stub
-        opp_id = uuid5(OPPORTUNITY_NAMESPACE, f"stub:{brand.id}:{i}")
 
-        opp = Opportunity(
-            id=opp_id,
-            brand=brand,
-            title=template["title"],
-            angle=template["angle"],
-            type=template["type"].value,
-            primary_channel=template["channel"].value,
-            score=template["score"],
-            score_explanation="Fallback stub - graph was unavailable",
-            source="stub_engine",
-            suggested_channels=[Channel.LINKEDIN.value, Channel.X.value],
-            created_via=CreatedVia.AI_SUGGESTED.value,
-            is_pinned=(i == 0),
-            metadata={"stub": True, "run_id": str(run_id)},
-        )
-        # Set timestamps manually for in-memory objects
-        opp.created_at = now
-        opp.updated_at = now
-        opportunities.append(opp)
+    with transaction.atomic():
+        for i, template in enumerate(templates):
+            # Generate deterministic ID for stub
+            opp_id = uuid5(OPPORTUNITY_NAMESPACE, f"stub:{brand.id}:{i}")
+
+            # Use update_or_create to persist (idempotent)
+            opp, created = Opportunity.objects.update_or_create(
+                id=opp_id,
+                defaults={
+                    "brand": brand,
+                    "title": template["title"],
+                    "angle": template["angle"],
+                    "type": template["type"].value,
+                    "primary_channel": template["channel"].value,
+                    "score": template["score"],
+                    "score_explanation": "Fallback stub - graph was unavailable",
+                    "source": "stub_engine",
+                    "suggested_channels": [Channel.LINKEDIN.value, Channel.X.value],
+                    "created_via": CreatedVia.AI_SUGGESTED.value,
+                    "is_pinned": (i == 0),
+                    "metadata": {
+                        "stub": True,
+                        "degraded_run_id": str(run_id),
+                        "why_now": template["why_now"],
+                        "generated_at": now.isoformat(),
+                    },
+                },
+            )
+
+            opportunities.append(opp)
+
+            logger.debug(
+                "Persisted stub opportunity",
+                extra={
+                    "run_id": str(run_id),
+                    "opp_id": str(opp_id),
+                    "title": template["title"][:50],
+                    "created": created,
+                },
+            )
+
+    logger.info(
+        "Persisted stub opportunities for degraded board",
+        extra={
+            "run_id": str(run_id),
+            "brand_id": str(brand.id),
+            "count": len(opportunities),
+        },
+    )
 
     return opportunities
 

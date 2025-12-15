@@ -1,0 +1,89 @@
+```json
+{
+  "opportunities": [
+    {
+      "title": "The Future of RevOps: Automation Trends to Watch",
+      "angle": "Explore the latest automation trends in RevOps and how they are shaping the future of B2B SaaS revenue teams.",
+      "type": "trend",
+      "primary_channel": "linkedin",
+      "suggested_channels": [],
+      "score": 85,
+      "score_explanation": "Highly relevant to RevOps trends and timely due to the increasing importance of automation in the industry. Fits well with target personas and is appropriate for LinkedIn.",
+      "why_now": "Automation is a key driver in RevOps, and staying ahead of trends ensures competitive advantage.",
+      "source": "",
+      "source_url": null
+    },
+    {
+      "title": "Breaking Down Data Silos: A Step-by-Step Guide",
+      "angle": "Provide a comprehensive guide on how B2B SaaS companies can effectively eliminate data silos to enhance RevOps efficiency.",
+      "type": "evergreen",
+      "primary_channel": "x",
+      "suggested_channels": [],
+      "score": 78,
+      "score_explanation": "Addresses a critical issue in RevOps with a practical approach. Timely and relevant for the audience, suitable for the X platform.",
+      "why_now": "Data silos are a persistent challenge for revenue teams, and solving this issue is crucial for operational success.",
+      "source": "",
+      "source_url": null
+    },
+    {
+      "title": "Unified RevOps Automation: The Key to Predictable Growth",
+      "angle": "Discuss how unifying RevOps processes through automation can lead to more predictable and sustainable growth.",
+      "type": "evergreen",
+      "primary_channel": "linkedin",
+      "suggested_channels": [],
+      "score": 80,
+      "score_explanation": "Relevant to RevOps and emphasizes sustainable growth, which is a key concern for the target audience. Well-suited for LinkedIn.",
+      "why_now": "Predictable growth is a constant goal for B2B SaaS companies, making this topic perpetually relevant.",
+      "source": "",
+      "source_url": null
+    },
+    {
+      "title": "How Competitors Are Leveraging RevOps for Market Leadership",
+      "angle": "Analyze how leading companies in the B2B SaaS space are using RevOps to gain a competitive edge.",
+      "type": "competitive",
+      "primary_channel": "x",
+      "suggested_channels": [],
+      "score": 75,
+      "score_explanation": "Provides valuable insights into competitor strategies, relevant for the audience. Timely and appropriate for the X platform.",
+      "why_now": "Understanding competitor strategies in RevOps can help companies refine their own approaches.",
+      "source": "",
+      "source_url": null
+    },
+    {
+      "title": "The Role of AI in RevOps: Transforming Revenue Strategies",
+      "angle": "Examine the impact of AI technologies on RevOps and how they are transforming revenue strategies in B2B SaaS.",
+      "type": "trend",
+      "primary_channel": "linkedin",
+      "suggested_channels": [],
+      "score": 82,
+      "score_explanation": "Highly relevant to current trends in technology and RevOps, timely for the audience, and suitable for LinkedIn.",
+      "why_now": "AI continues to evolve and influence various business functions, including RevOps.",
+      "source": "",
+      "source_url": null
+    },
+    {
+      "title": "RevOps Metrics That Matter: A Data-Driven Approach",
+      "angle": "Identify the key metrics that B2B SaaS companies should focus on to drive RevOps success.",
+      "type": "evergreen",
+      "primary_channel": "x",
+      "suggested_channels": [],
+      "score": 70,
+      "score_explanation": "Addresses a fundamental aspect of RevOps with a focus on data-driven decision-making. Relevant for the audience and appropriate for the X platform.",
+      "why_now": "Data-driven decision-making is essential for optimizing RevOps performance.",
+      "source": "",
+      "source_url": null
+    },
+    {
+      "title": "RevOps and Customer Experience: A Symbiotic Relationship",
+      "angle": "Explore how RevOps can enhance customer experience and why this relationship is crucial for business growth.",
+      "type": "evergreen",
+      "primary_channel": "linkedin",
+      "suggested_channels": [],
+      "score": 76,
+      "score_explanation": "Relevant to both RevOps and customer experience, timely for businesses focusing on differentiation. Suitable for LinkedIn.",
+      "why_now": "Customer experience remains a top priority for businesses seeking to differentiate themselves.",
+      "source": "",
+      "source_url": null
+    },
+    {
+      "title": "The Evolution of RevOps:

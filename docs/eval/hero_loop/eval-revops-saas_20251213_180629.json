@@ -1,0 +1,100 @@
+{
+  "run_id": "58f36604-1084-46da-9748-9160e1d6ee55",
+  "brand_slug": "eval-revops-saas",
+  "timestamp": "2025-12-13T18:06:29.054636+00:00",
+  "llm_disabled": false,
+  "status": "failed",
+  "stage_status": {
+    "f1_status": "degraded",
+    "f2_status": "failed",
+    "failure_reason": "graph_error",
+    "is_structurally_valid": false
+  },
+  "quality_labels": {
+    "f1_label": null,
+    "f2_label": null,
+    "run_label": "invalid"
+  },
+  "metrics": {
+    "opportunity_count": 6,
+    "valid_opportunity_count": 6,
+    "package_count": 0,
+    "variant_count": 0,
+    "taboo_violations": 0,
+    "f1_status": "degraded",
+    "f2_status": "failed"
+  },
+  "case": {
+    "eval_brand_id": "eval_brand_revops_saas",
+    "brand_name": "RevOps Intelligence",
+    "opportunities": [
+      {
+        "id": "e7916129-2b1f-565c-bbef-a96381f34e50",
+        "title": "Industry trend: AI adoption in RevOps Intelligence's sector",
+        "angle": "Rising discussion about AI tools - opportunity to share our perspective on practical implementation.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 75.0,
+        "is_valid": true
+      },
+      {
+        "id": "fcbe9d09-fc83-5c81-8bf4-f929ec6aa861",
+        "title": "Weekly thought leadership post",
+        "angle": "Regular cadence content about our core expertise area.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 72.0,
+        "is_valid": true
+      },
+      {
+        "id": "e3907c8c-1418-58d7-aeba-e82e6c2564b3",
+        "title": "Customer success story",
+        "angle": "Recent customer achieved notable results - great case study material.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 70.0,
+        "is_valid": true
+      },
+      {
+        "id": "334e618f-1064-5ba0-b01b-219abf363434",
+        "title": "Competitor announcement response",
+        "angle": "Competitor just announced a feature - opportunity to differentiate our approach.",
+        "type": "competitive",
+        "primary_channel": "x",
+        "score": 68.0,
+        "is_valid": true
+      },
+      {
+        "id": "05df4b60-3d55-57ea-9517-1fa30c6fa2d5",
+        "title": "Industry report commentary",
+        "angle": "New industry report released - can provide contrarian take aligned with our positioning.",
+        "type": "trend",
+        "primary_channel": "x",
+        "score": 65.0,
+        "is_valid": true
+      },
+      {
+        "id": "c641b833-fc33-5ddd-a96d-5caf7dcb5056",
+        "title": "Behind the scenes: Product development",
+        "angle": "Authenticity content showing how we build - builds trust with audience.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 60.0,
+        "is_valid": true
+      }
+    ],
+    "packages": [],
+    "variants": [],
+    "warnings": [
+      "Error processing opportunity e7916129-2b1f-565c-bbef-a96381f34e50: Graph failed: LLM call failed: LLM call failed: Error code: 404 - {'error': {'message': 'The model `gpt-5.1-thinking` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}",
+      "Error processing opportunity fcbe9d09-fc83-5c81-8bf4-f929ec6aa861: Graph failed: LLM call failed: LLM call failed: Error code: 404 - {'error': {'message': 'The model `gpt-5.1-thinking` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}",
+      "Error processing opportunity e3907c8c-1418-58d7-aeba-e82e6c2564b3: Graph failed: LLM call failed: LLM call failed: Error code: 404 - {'error': {'message': 'The model `gpt-5.1-thinking` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}",
+      "Error processing opportunity 334e618f-1064-5ba0-b01b-219abf363434: Graph failed: LLM call failed: LLM call failed: Error code: 404 - {'error': {'message': 'The model `gpt-5.1-thinking` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}",
+      "Error processing opportunity 05df4b60-3d55-57ea-9517-1fa30c6fa2d5: Graph failed: LLM call failed: LLM call failed: Error code: 404 - {'error': {'message': 'The model `gpt-5.1-thinking` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}",
+      "Error processing opportunity c641b833-fc33-5ddd-a96d-5caf7dcb5056: Graph failed: LLM call failed: LLM call failed: Error code: 404 - {'error': {'message': 'The model `gpt-5.1-thinking` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+    ]
+  },
+  "errors": [
+    "Stage failure: graph_error"
+  ]
+}

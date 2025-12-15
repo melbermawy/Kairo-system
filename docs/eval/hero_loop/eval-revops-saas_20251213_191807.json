@@ -1,0 +1,120 @@
+{
+  "run_id": "38fc9183-04b5-4b00-9d2f-3a887adac5d9",
+  "brand_slug": "eval-revops-saas",
+  "timestamp": "2025-12-13T19:18:07.033581+00:00",
+  "llm_disabled": false,
+  "status": "degraded",
+  "stage_status": {
+    "f1_status": "degraded",
+    "f2_status": "ok",
+    "failure_reason": "graph_error",
+    "is_structurally_valid": true
+  },
+  "quality_labels": {
+    "f1_label": "bad",
+    "f2_label": "partial",
+    "run_label": "bad"
+  },
+  "metrics": {
+    "opportunity_count": 6,
+    "valid_opportunity_count": 6,
+    "package_count": 1,
+    "variant_count": 2,
+    "taboo_violations": 0,
+    "f1_status": "degraded",
+    "f2_status": "ok",
+    "opportunity_coverage": 0.0,
+    "avg_opportunity_score": 68.33333333333333,
+    "golden_match_count": 0
+  },
+  "case": {
+    "eval_brand_id": "eval_brand_revops_saas",
+    "brand_name": "RevOps Intelligence",
+    "opportunities": [
+      {
+        "id": "b043d637-701d-5ad4-84d1-3b683dbead58",
+        "title": "Industry trend: AI adoption in RevOps Intelligence's sector",
+        "angle": "Rising discussion about AI tools - opportunity to share our perspective on practical implementation.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 75.0,
+        "is_valid": true
+      },
+      {
+        "id": "1c0eacab-fd9f-562e-9fe8-ab6a30298268",
+        "title": "Weekly thought leadership post",
+        "angle": "Regular cadence content about our core expertise area.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 72.0,
+        "is_valid": true
+      },
+      {
+        "id": "4c689e8d-50da-54cf-bc2e-f1a37377f415",
+        "title": "Customer success story",
+        "angle": "Recent customer achieved notable results - great case study material.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 70.0,
+        "is_valid": true
+      },
+      {
+        "id": "6a8782d9-abe5-5d01-bdb4-f06b8fef31f6",
+        "title": "Competitor announcement response",
+        "angle": "Competitor just announced a feature - opportunity to differentiate our approach.",
+        "type": "competitive",
+        "primary_channel": "x",
+        "score": 68.0,
+        "is_valid": true
+      },
+      {
+        "id": "0655518b-4b7e-529a-9c0a-2124ad1374e2",
+        "title": "Industry report commentary",
+        "angle": "New industry report released - can provide contrarian take aligned with our positioning.",
+        "type": "trend",
+        "primary_channel": "x",
+        "score": 65.0,
+        "is_valid": true
+      },
+      {
+        "id": "56bc9285-7673-5689-ba2e-29b814588c43",
+        "title": "Behind the scenes: Product development",
+        "angle": "Authenticity content showing how we build - builds trust with audience.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 60.0,
+        "is_valid": true
+      }
+    ],
+    "packages": [
+      {
+        "id": "871b6f88-6f75-42e7-841e-7b4f42a8b61f",
+        "title": "Practical AI Implementation in RevOps: Beyond the Hype",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "b043d637-701d-5ad4-84d1-3b683dbead58"
+      }
+    ],
+    "variants": [
+      {
+        "id": "8fcf79c8-fba3-4938-a949-bd4b35716370",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "871b6f88-6f75-42e7-841e-7b4f42a8b61f",
+        "body_preview": "AI in RevOps: It's not just about the hype. While AI tools promise to revolutionize revenue operatio"
+      },
+      {
+        "id": "6a2a5c21-b8b5-4fd6-8ba7-f6640d90ddb7",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "871b6f88-6f75-42e7-841e-7b4f42a8b61f",
+        "body_preview": "AI in RevOps: Beyond the hype. It's not about the latest tech; it's about aligning AI with your busi"
+      }
+    ],
+    "warnings": []
+  },
+  "errors": []
+}

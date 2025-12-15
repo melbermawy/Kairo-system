@@ -111,7 +111,12 @@ class SynthesisOutput(BaseModel):
 
 
 class ScoredOpportunity(BaseModel):
-    """Opportunity with normalized score from scoring node."""
+    """
+    Full opportunity with normalized score, used as final output.
+
+    This schema combines synthesis data with scoring results.
+    Created by joining RawOpportunityIdea with MinimalScoringItem.
+    """
 
     title: str
     angle: str
@@ -128,10 +133,50 @@ class ScoredOpportunity(BaseModel):
     raw_reasoning: str | None = Field(default=None)
 
 
+# -----------------------------------------------------------------------------
+# MINIMAL SCORING SCHEMA - compact to reduce truncation risk
+# -----------------------------------------------------------------------------
+
+
+class MinimalScoringItem(BaseModel):
+    """
+    Minimal scoring item returned by the LLM scoring step.
+
+    Design: Ultra-compact schema to minimize LLM output tokens and reduce
+    truncation risk. Contains ONLY the scoring decision - original opportunity
+    data is joined back from synthesis output by index.
+
+    Fields:
+    - idx: 0-based index into the synthesis opportunities list
+    - score: 0-100 score per rubric criteria
+    - band: quality band for quick filtering
+    - reason: max 1 short sentence explaining score (optional)
+    """
+
+    idx: int = Field(ge=0, description="0-based index into synthesis opportunities")
+    score: int = Field(ge=0, le=100, description="Score 0-100")
+    band: str = Field(
+        description="Quality band: 'invalid' (taboo/0), 'weak' (<65), 'strong' (65+)"
+    )
+    reason: str | None = Field(
+        default=None, max_length=100, description="Max 1 short sentence"
+    )
+
+
 class ScoringOutput(BaseModel):
     """Output from the scoring/normalization LLM node."""
 
     opportunities: list[ScoredOpportunity] = Field(min_length=6, max_length=24)
+
+
+class MinimalScoringOutput(BaseModel):
+    """
+    Minimal scoring output - just an array of scoring items.
+
+    Used by the LLM scoring call. Does NOT contain full opportunity data.
+    """
+
+    scores: list[MinimalScoringItem] = Field(min_length=1, max_length=24)
 
 
 # =============================================================================
@@ -184,32 +229,27 @@ REQUIREMENTS:
 
 Return your response as JSON with an "opportunities" array."""
 
-SCORING_SYSTEM_PROMPT = """You are evaluating content opportunities for {brand_name}.
+SCORING_SYSTEM_PROMPT = """Score content opportunities for {brand_name}. TABOOS (score 0): {taboos}
 
-Score each opportunity on a 0-100 scale based on:
-- Relevance to brand positioning and pillars (0-30 points)
-- Timeliness and urgency (0-25 points)
-- Audience fit for target personas (0-25 points)
-- Channel appropriateness (0-20 points)
+Scoring: relevance 0-30, timeliness 0-25, audience 0-25, channel 0-20. Total 0-100.
+Bands: invalid=0 (taboo), weak=1-64, strong=65-100."""
 
-BRAND TABOOS (score 0 if violated): {taboos}
+SCORING_USER_PROMPT = """Score these {opp_count} opportunities. Output ONLY a JSON object with "scores" array.
+No markdown fences. No extra keys. No explanations outside JSON.
 
-Be strict but fair. Great opportunities score 80+. Good ones score 65-79. Marginal ones score 50-64.
-Remove any that violate taboos by giving them score 0.
+OPPORTUNITIES:
+{opportunities_summary}
 
-Your output must be valid JSON matching the required schema."""
+OUTPUT FORMAT - exactly this structure:
+{{"scores":[{{"idx":0,"score":75,"band":"strong","reason":"short reason"}},{{"idx":1,"score":0,"band":"invalid","reason":"violates taboo"}}]}}
 
-SCORING_USER_PROMPT = """Score and normalize these content opportunities:
+RULES:
+- idx = 0-based index matching input order
+- score = 0-100 integer
+- band = "invalid" if score=0, "weak" if 1-64, "strong" if 65+
+- reason = max 1 short sentence or null
 
-{opportunities_json}
-
-For each opportunity:
-1. Assign a score (0-100) based on the criteria
-2. Add a brief score_explanation
-3. Normalize channel names to lowercase: "linkedin" or "x"
-4. Normalize type to lowercase: "trend", "evergreen", "competitive", or "campaign"
-
-Return JSON with "opportunities" array containing all scored opportunities."""
+Return ONLY the JSON object:"""
 
 
 # =============================================================================
@@ -316,11 +356,39 @@ def _synthesize_opportunities(
         result = parse_structured_output(response.raw_text, SynthesisOutput)
         return result.opportunities
     except StructuredOutputError as e:
+        # Debug logging for parsing failures - redact to first 400 chars, no PII
+        raw_snippet = response.raw_text[:400].replace("\n", "\\n") if response.raw_text else "<empty>"
+        logger.debug(
+            "Synthesis parse failure details",
+            extra={
+                "run_id": str(run_id),
+                "step": "synthesis_parse",
+                "error_type": type(e).__name__,
+                "error_msg": str(e)[:200],
+                "raw_snippet": raw_snippet,
+            },
+        )
         logger.warning(
             "Synthesis output parsing failed",
             extra={"run_id": str(run_id), "error": str(e)},
         )
         raise
+
+
+def _build_compact_opportunities_summary(
+    raw_opportunities: list[RawOpportunityIdea],
+) -> str:
+    """Build a compact summary of opportunities for the scoring prompt."""
+    lines = []
+    for i, opp in enumerate(raw_opportunities):
+        # Just index, title, type, channel - minimal info for scoring
+        lines.append(f"{i}. [{opp.type}] {opp.title} ({opp.primary_channel})")
+    return "\n".join(lines)
+
+
+# Constants for scoring LLM call
+SCORING_MAX_TOKENS = 1024  # Bounded output to reduce truncation risk
+SCORING_TEMPERATURE = 0.0  # Deterministic scoring
 
 
 def _score_and_normalize_opportunities(
@@ -332,13 +400,22 @@ def _score_and_normalize_opportunities(
     """
     Node 2: Score and normalize opportunities.
 
-    Uses LLM to assign scores and normalize the output format.
-    """
-    # Convert raw opportunities to JSON for the prompt
-    opps_data = [opp.model_dump() for opp in raw_opportunities]
-    import json
+    Uses LLM to assign scores with a minimal schema, then joins back with
+    synthesis data. Implements per-item tolerant parsing - individual
+    malformed items become invalid rather than failing the whole graph.
 
-    opps_json = json.dumps(opps_data, indent=2)
+    Returns:
+        List of ScoredOpportunity objects. Items where scoring failed
+        will have score=0 and a rejection reason.
+
+    Raises:
+        GraphError: Only if JSON parsing completely fails (truncated/garbage).
+    """
+    import json
+    from pydantic import ValidationError
+
+    # Build compact summary for scoring prompt
+    opportunities_summary = _build_compact_opportunities_summary(raw_opportunities)
 
     taboos_str = ", ".join(brand_snapshot.taboos) or "None"
 
@@ -347,9 +424,12 @@ def _score_and_normalize_opportunities(
         taboos=taboos_str,
     )
 
-    user_prompt = SCORING_USER_PROMPT.format(opportunities_json=opps_json)
+    user_prompt = SCORING_USER_PROMPT.format(
+        opp_count=len(raw_opportunities),
+        opportunities_summary=opportunities_summary,
+    )
 
-    # Make LLM call - use fast model for scoring
+    # Make LLM call with bounded output
     response = llm_client.call(
         brand_id=brand_snapshot.brand_id,
         flow="F1_opportunities_scoring",
@@ -358,18 +438,147 @@ def _score_and_normalize_opportunities(
         system_prompt=system_prompt,
         run_id=run_id,
         trigger_source="graph",
+        max_output_tokens=SCORING_MAX_TOKENS,
+        temperature=SCORING_TEMPERATURE,
     )
 
-    # Parse structured output
+    # Step 1: Try to parse raw JSON
+    raw_text = response.raw_text.strip()
+
+    # Handle markdown code fences
+    import re
+    fence_pattern = r"```(?:json)?\s*([\s\S]*?)\s*```"
+    match = re.search(fence_pattern, raw_text)
+    if match:
+        raw_text = match.group(1).strip()
+
     try:
-        result = parse_structured_output(response.raw_text, ScoringOutput)
-        return result.opportunities
-    except StructuredOutputError as e:
-        logger.warning(
-            "Scoring output parsing failed",
-            extra={"run_id": str(run_id), "error": str(e)},
+        parsed_json = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        # Total JSON failure - this is the true truncation/garbage case
+        raw_snippet = raw_text[:400].replace("\n", "\\n") if raw_text else "<empty>"
+        logger.error(
+            "Scoring JSON decode failed (likely truncated)",
+            extra={
+                "run_id": str(run_id),
+                "error": str(e),
+                "raw_snippet": raw_snippet,
+            },
         )
-        raise
+        raise GraphError(
+            f"Scoring JSON decode failed: {e}",
+            original_error=StructuredOutputError(f"Invalid JSON: {e}"),
+        )
+
+    # Step 2: Extract scores array
+    scores_list = parsed_json.get("scores", [])
+    if not isinstance(scores_list, list):
+        logger.error(
+            "Scoring response missing 'scores' array",
+            extra={"run_id": str(run_id), "keys": list(parsed_json.keys())},
+        )
+        raise GraphError(
+            "Scoring response missing 'scores' array",
+            original_error=StructuredOutputError("Missing 'scores' key"),
+        )
+
+    # Step 3: Per-item tolerant parsing - validate each scoring item
+    validated_scores: dict[int, MinimalScoringItem] = {}
+    parse_failures: list[tuple[int, str]] = []
+
+    for i, item in enumerate(scores_list):
+        try:
+            validated = MinimalScoringItem.model_validate(item)
+            validated_scores[validated.idx] = validated
+        except ValidationError as e:
+            error_summary = "; ".join(
+                f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}"
+                for err in e.errors()[:2]  # Limit error details
+            )
+            parse_failures.append((i, error_summary))
+            logger.warning(
+                f"Scoring item {i} validation failed: {error_summary[:100]}",
+                extra={"run_id": str(run_id), "item_index": i},
+            )
+
+    # Step 4: Check if ALL items failed - that's a graph error
+    if len(validated_scores) == 0 and len(raw_opportunities) > 0:
+        logger.error(
+            "All scoring items failed validation",
+            extra={
+                "run_id": str(run_id),
+                "failure_count": len(parse_failures),
+                "raw_count": len(raw_opportunities),
+            },
+        )
+        raise GraphError(
+            f"All {len(parse_failures)} scoring items failed validation",
+            original_error=StructuredOutputError("All items invalid"),
+        )
+
+    # Step 5: Join scoring results with synthesis data
+    scored_opportunities: list[ScoredOpportunity] = []
+
+    for idx, raw_opp in enumerate(raw_opportunities):
+        scoring = validated_scores.get(idx)
+
+        if scoring:
+            # Successfully scored
+            scored_opp = ScoredOpportunity(
+                title=raw_opp.title,
+                angle=raw_opp.angle,
+                type=raw_opp.type.lower(),
+                primary_channel=raw_opp.primary_channel.lower(),
+                suggested_channels=[ch.lower() for ch in raw_opp.suggested_channels],
+                score=float(scoring.score),
+                score_explanation=scoring.reason or "",
+                why_now=raw_opp.why_now,
+                source=raw_opp.source,
+                source_url=raw_opp.source_url,
+                persona_hint=raw_opp.persona_hint,
+                pillar_hint=raw_opp.pillar_hint,
+                raw_reasoning=raw_opp.reasoning,
+            )
+        else:
+            # Scoring failed for this item - mark as invalid with score=0
+            # Find the failure reason if available
+            failure_reason = next(
+                (reason for fi, reason in parse_failures if fi == idx),
+                "scoring_response_missing",
+            )
+            scored_opp = ScoredOpportunity(
+                title=raw_opp.title,
+                angle=raw_opp.angle,
+                type=raw_opp.type.lower(),
+                primary_channel=raw_opp.primary_channel.lower(),
+                suggested_channels=[ch.lower() for ch in raw_opp.suggested_channels],
+                score=0.0,  # Invalid score
+                score_explanation=f"scoring_schema_mismatch: {failure_reason[:80]}",
+                why_now=raw_opp.why_now,
+                source=raw_opp.source,
+                source_url=raw_opp.source_url,
+                persona_hint=raw_opp.persona_hint,
+                pillar_hint=raw_opp.pillar_hint,
+                raw_reasoning=raw_opp.reasoning,
+            )
+            logger.debug(
+                f"Opportunity {idx} scored as invalid due to schema mismatch",
+                extra={"run_id": str(run_id), "title": raw_opp.title[:50]},
+            )
+
+        scored_opportunities.append(scored_opp)
+
+    logger.info(
+        "Scoring complete with tolerant parsing",
+        extra={
+            "run_id": str(run_id),
+            "total": len(raw_opportunities),
+            "scored_ok": len(validated_scores),
+            "scoring_failures": len(parse_failures),
+        },
+    )
+
+    return scored_opportunities
 
 
 def _validate_opportunity(

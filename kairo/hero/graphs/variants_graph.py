@@ -182,7 +182,12 @@ REQUIREMENTS:
    - X: Under 280 chars ideally, punchy, no greetings
    - Newsletter: Email-style, can be longer, narrative structure
 
-Return your response as JSON with a "variants" array."""
+Return your response as JSON with a "variants" array. Each variant object must have these fields:
+- channel (string: "linkedin", "x", or "newsletter")
+- body (string: the main content text - this is REQUIRED)
+- title (string, optional: only for newsletter)
+- call_to_action (string, optional)
+- pattern_hint (string, optional)"""
 
 
 # =============================================================================

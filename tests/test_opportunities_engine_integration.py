@@ -343,6 +343,79 @@ class TestDegradedMode:
             # Should have stub opportunities
             assert len(result.opportunities) >= 6
 
+    def test_degraded_stub_opportunities_persisted_to_db(self, brand):
+        """8c: Stub opportunities in degraded mode are persisted to DB."""
+        # Clear any existing opportunities
+        Opportunity.objects.filter(brand=brand).delete()
+
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.side_effect = GraphError("Total failure")
+
+            result = opportunities_engine.generate_today_board(brand.id)
+
+            # Stubs should be in the result
+            assert len(result.opportunities) >= 6
+            assert result.meta.degraded is True
+
+            # 8c KEY ASSERTION: Stubs must exist in DB
+            db_opps = list(Opportunity.objects.filter(brand=brand))
+            assert len(db_opps) >= 6, "Stub opportunities must be persisted to DB"
+
+            # Verify we can look up each returned opp by ID
+            for opp_dto in result.opportunities:
+                db_opp = Opportunity.objects.filter(id=opp_dto.id).first()
+                assert db_opp is not None, f"Opportunity {opp_dto.id} not found in DB"
+                assert db_opp.title == opp_dto.title
+
+    def test_degraded_stub_opportunities_have_stub_metadata(self, brand):
+        """8c: Stub opportunities have metadata.stub=True for identification."""
+        Opportunity.objects.filter(brand=brand).delete()
+
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.side_effect = GraphError("Graph unavailable")
+
+            result = opportunities_engine.generate_today_board(brand.id)
+
+            # Check metadata on persisted stubs
+            for opp_dto in result.opportunities:
+                db_opp = Opportunity.objects.get(id=opp_dto.id)
+                assert db_opp.metadata is not None
+                assert db_opp.metadata.get("stub") is True, (
+                    "Stub opportunities should have metadata.stub=True"
+                )
+
+    def test_degraded_stubs_can_be_used_by_content_engine(self, brand):
+        """8c: F2 (content engine) can use degraded stub opportunities."""
+        from kairo.hero.engines import content_engine
+
+        Opportunity.objects.filter(brand=brand).delete()
+
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.side_effect = GraphError("LLM unavailable")
+
+            result = opportunities_engine.generate_today_board(brand.id)
+
+            # Get one of the stub opportunities
+            stub_opp_id = result.opportunities[0].id
+
+            # F2 should be able to look up this opportunity by ID
+            # This is the key 8c test - previously this would raise DoesNotExist
+            db_opp = Opportunity.objects.get(id=stub_opp_id)
+            assert db_opp is not None
+            assert db_opp.title == result.opportunities[0].title
+
+            # Verify it can be passed to content_engine (just the lookup, not full generation)
+            # The opportunity should exist and be usable
+            assert db_opp.brand_id == brand.id
+            assert db_opp.angle is not None
+            assert db_opp.primary_channel in ["linkedin", "x"]
+
     def test_degraded_board_notes_explain_failure(self, brand):
         """Degraded board notes explain the failure."""
         with patch(
@@ -397,6 +470,72 @@ class TestDegradedMode:
                 assert opp.angle, "Stub must have angle"
                 assert opp.primary_channel in {Channel.LINKEDIN, Channel.X}
                 assert 0 <= opp.score <= 100
+
+    def test_degraded_stubs_full_f2_package_creation(self, brand):
+        """
+        8c END-TO-END: Degraded F1 stubs can be used by F2 to create packages.
+
+        This is the critical 8c test that proves:
+        1. F1 degraded mode produces opportunities in DB
+        2. F2 can successfully look them up by ID
+        3. F2 can create packages from them (no DoesNotExist)
+
+        Previously this would fail because stubs were in-memory only.
+        """
+        from kairo.hero.engines import content_engine
+
+        # Clear any existing opportunities
+        Opportunity.objects.filter(brand=brand).delete()
+
+        # Step 1: Run F1 in degraded mode (graph failure)
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.side_effect = GraphError("LLM unavailable for F1")
+
+            f1_result = opportunities_engine.generate_today_board(brand.id)
+
+            # Verify F1 returned degraded stubs
+            assert f1_result.meta.degraded is True
+            assert len(f1_result.opportunities) >= 6
+            stub_opp = f1_result.opportunities[0]
+
+        # Step 2: F2 creates package from the degraded stub opportunity
+        # This is where 8c was broken before - F2 would fail with DoesNotExist
+        package = content_engine.create_package_from_opportunity(
+            brand_id=brand.id,
+            opportunity_id=stub_opp.id,
+        )
+
+        # Step 3: Verify package was created successfully
+        assert package is not None
+        assert package.brand_id == brand.id
+        assert package.origin_opportunity_id == stub_opp.id
+        assert package.title is not None
+        assert len(package.title) > 0
+
+        # Package should be in DB
+        from kairo.core.models import ContentPackage
+        db_package = ContentPackage.objects.get(id=package.id)
+        assert db_package.origin_opportunity_id == stub_opp.id
+
+    def test_degraded_reason_code_is_populated(self, brand):
+        """
+        8c: Degraded board meta has non-empty reason code.
+        """
+        Opportunity.objects.filter(brand=brand).delete()
+
+        with patch(
+            "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+        ) as mock_graph:
+            mock_graph.side_effect = GraphError("Total graph failure")
+
+            result = opportunities_engine.generate_today_board(brand.id)
+
+            assert result.meta.degraded is True
+            assert result.meta.reason is not None
+            assert len(result.meta.reason) > 0
+            assert result.meta.reason == "graph_error"
 
 
 # =============================================================================

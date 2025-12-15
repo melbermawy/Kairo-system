@@ -1,0 +1,240 @@
+{
+  "run_id": "f667e2ab-8728-4a07-88bb-eb5398e21bd4",
+  "brand_slug": "eval-revops-saas",
+  "timestamp": "2025-12-13T18:09:00.885736+00:00",
+  "llm_disabled": true,
+  "status": "degraded",
+  "stage_status": {
+    "f1_status": "degraded",
+    "f2_status": "ok",
+    "failure_reason": "graph_error",
+    "is_structurally_valid": true
+  },
+  "quality_labels": {
+    "f1_label": "bad",
+    "f2_label": "partial",
+    "run_label": "bad"
+  },
+  "metrics": {
+    "opportunity_count": 6,
+    "valid_opportunity_count": 6,
+    "package_count": 6,
+    "variant_count": 12,
+    "taboo_violations": 0,
+    "f1_status": "degraded",
+    "f2_status": "ok",
+    "opportunity_coverage": 0.0,
+    "avg_opportunity_score": 68.33333333333333,
+    "golden_match_count": 0
+  },
+  "case": {
+    "eval_brand_id": "eval_brand_revops_saas",
+    "brand_name": "RevOps Intelligence",
+    "opportunities": [
+      {
+        "id": "e7916129-2b1f-565c-bbef-a96381f34e50",
+        "title": "Industry trend: AI adoption in RevOps Intelligence's sector",
+        "angle": "Rising discussion about AI tools - opportunity to share our perspective on practical implementation.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 75.0,
+        "is_valid": true
+      },
+      {
+        "id": "fcbe9d09-fc83-5c81-8bf4-f929ec6aa861",
+        "title": "Weekly thought leadership post",
+        "angle": "Regular cadence content about our core expertise area.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 72.0,
+        "is_valid": true
+      },
+      {
+        "id": "e3907c8c-1418-58d7-aeba-e82e6c2564b3",
+        "title": "Customer success story",
+        "angle": "Recent customer achieved notable results - great case study material.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 70.0,
+        "is_valid": true
+      },
+      {
+        "id": "334e618f-1064-5ba0-b01b-219abf363434",
+        "title": "Competitor announcement response",
+        "angle": "Competitor just announced a feature - opportunity to differentiate our approach.",
+        "type": "competitive",
+        "primary_channel": "x",
+        "score": 68.0,
+        "is_valid": true
+      },
+      {
+        "id": "05df4b60-3d55-57ea-9517-1fa30c6fa2d5",
+        "title": "Industry report commentary",
+        "angle": "New industry report released - can provide contrarian take aligned with our positioning.",
+        "type": "trend",
+        "primary_channel": "x",
+        "score": 65.0,
+        "is_valid": true
+      },
+      {
+        "id": "c641b833-fc33-5ddd-a96d-5caf7dcb5056",
+        "title": "Behind the scenes: Product development",
+        "angle": "Authenticity content showing how we build - builds trust with audience.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 60.0,
+        "is_valid": true
+      }
+    ],
+    "packages": [
+      {
+        "id": "97e0e922-64f9-4924-9839-6daa56d21219",
+        "title": "Package: Industry trend: AI adoption in RevOps Intelligence",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "x"
+        ],
+        "origin_opportunity_id": "e7916129-2b1f-565c-bbef-a96381f34e50"
+      },
+      {
+        "id": "2f9b2897-f222-4506-b71c-b3b78253810c",
+        "title": "Package: Weekly thought leadership post",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "x"
+        ],
+        "origin_opportunity_id": "fcbe9d09-fc83-5c81-8bf4-f929ec6aa861"
+      },
+      {
+        "id": "49fd7a55-5317-4be4-af28-6c8910d07371",
+        "title": "Package: Customer success story",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "x"
+        ],
+        "origin_opportunity_id": "e3907c8c-1418-58d7-aeba-e82e6c2564b3"
+      },
+      {
+        "id": "72de76c1-ede1-4df2-8e35-c350b2e0898f",
+        "title": "Package: Competitor announcement response",
+        "status": "draft",
+        "channels": [
+          "x",
+          "linkedin"
+        ],
+        "origin_opportunity_id": "334e618f-1064-5ba0-b01b-219abf363434"
+      },
+      {
+        "id": "3f28b60a-1b5e-429a-8e2c-abb0d83931ca",
+        "title": "Package: Industry report commentary",
+        "status": "draft",
+        "channels": [
+          "x",
+          "linkedin"
+        ],
+        "origin_opportunity_id": "05df4b60-3d55-57ea-9517-1fa30c6fa2d5"
+      },
+      {
+        "id": "2fe462ba-50a3-4e62-8493-cd0b6fcdc6da",
+        "title": "Package: Behind the scenes: Product development",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "x"
+        ],
+        "origin_opportunity_id": "c641b833-fc33-5ddd-a96d-5caf7dcb5056"
+      }
+    ],
+    "variants": [
+      {
+        "id": "dafa6453-3c4b-4ca4-8255-41adeef4111d",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "97e0e922-64f9-4924-9839-6daa56d21219",
+        "body_preview": "Here's what we've learned about this opportunity:\n\nThe key insight is that our audience cares deeply"
+      },
+      {
+        "id": "3350e16b-83bc-4077-ae7c-502671d6bd37",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "97e0e922-64f9-4924-9839-6daa56d21219",
+        "body_preview": "Key insight: value and transparency drive trust.\n\nWhen you focus on clear communication, everything "
+      },
+      {
+        "id": "4ef7c0dd-ae42-4a91-8d52-a85843359ed8",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "2f9b2897-f222-4506-b71c-b3b78253810c",
+        "body_preview": "Here's what we've learned about this opportunity:\n\nThe key insight is that our audience cares deeply"
+      },
+      {
+        "id": "9e2d0f02-c9bd-477b-b383-3d6a05c3adb1",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "2f9b2897-f222-4506-b71c-b3b78253810c",
+        "body_preview": "Key insight: value and transparency drive trust.\n\nWhen you focus on clear communication, everything "
+      },
+      {
+        "id": "22f9b8a6-66d3-4992-8357-a39a6ccc9ed2",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "49fd7a55-5317-4be4-af28-6c8910d07371",
+        "body_preview": "Here's what we've learned about this opportunity:\n\nThe key insight is that our audience cares deeply"
+      },
+      {
+        "id": "bd3f7052-23e8-4254-af32-5d52d333a5ef",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "49fd7a55-5317-4be4-af28-6c8910d07371",
+        "body_preview": "Key insight: value and transparency drive trust.\n\nWhen you focus on clear communication, everything "
+      },
+      {
+        "id": "ac0ce32b-05fe-4c61-8f8f-4c6452d5fba8",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "72de76c1-ede1-4df2-8e35-c350b2e0898f",
+        "body_preview": "Key insight: value and transparency drive trust.\n\nWhen you focus on clear communication, everything "
+      },
+      {
+        "id": "52eb573f-a19f-4a8e-a621-44b26793c9a0",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "72de76c1-ede1-4df2-8e35-c350b2e0898f",
+        "body_preview": "Here's what we've learned about this opportunity:\n\nThe key insight is that our audience cares deeply"
+      },
+      {
+        "id": "375d46bf-c250-4609-b831-9fe88a8d5914",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "3f28b60a-1b5e-429a-8e2c-abb0d83931ca",
+        "body_preview": "Key insight: value and transparency drive trust.\n\nWhen you focus on clear communication, everything "
+      },
+      {
+        "id": "144e7232-1e20-4c97-bff4-0ae16e1b10f1",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "3f28b60a-1b5e-429a-8e2c-abb0d83931ca",
+        "body_preview": "Here's what we've learned about this opportunity:\n\nThe key insight is that our audience cares deeply"
+      },
+      {
+        "id": "3333e62d-fa37-4f04-926d-14ad5fa1b16d",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "2fe462ba-50a3-4e62-8493-cd0b6fcdc6da",
+        "body_preview": "Here's what we've learned about this opportunity:\n\nThe key insight is that our audience cares deeply"
+      },
+      {
+        "id": "0a07658a-146d-4407-9e76-9e017201ad7d",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "2fe462ba-50a3-4e62-8493-cd0b6fcdc6da",
+        "body_preview": "Key insight: value and transparency drive trust.\n\nWhen you focus on clear communication, everything "
+      }
+    ],
+    "warnings": []
+  },
+  "errors": []
+}
