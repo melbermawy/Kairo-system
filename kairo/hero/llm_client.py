@@ -45,6 +45,22 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("kairo.llm")
 
+# Import observability logging (late import to avoid circular dependency issues)
+_obs_module = None
+
+
+def _get_obs_module():
+    """Lazy import of observability module to avoid circular imports."""
+    global _obs_module
+    if _obs_module is None:
+        try:
+            from kairo.hero import observability_store
+
+            _obs_module = observability_store
+        except ImportError:
+            _obs_module = False  # Mark as unavailable
+    return _obs_module if _obs_module else None
+
 # =============================================================================
 # TYPE DEFINITIONS
 # =============================================================================
@@ -863,6 +879,7 @@ class LLMClient:
         Log an LLM call for observability.
 
         Logs are structured with all required fields per PR-6/PR-7.
+        Also writes to observability sink (PR-11) if enabled.
 
         Required fields:
         - run_id
@@ -901,6 +918,23 @@ class LLMClient:
             logger.error("LLM call failed", extra=log_data)
         else:
             logger.info("LLM call completed", extra=log_data)
+
+        # Also write to observability sink (PR-11)
+        obs = _get_obs_module()
+        if obs:
+            obs.log_llm_call(
+                run_id=run_id,
+                brand_id=brand_id,
+                flow=flow,
+                model=model,
+                role=role,
+                latency_ms=latency_ms,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                status=status,
+                estimated_cost_usd=estimated_cost_usd,
+                error_summary=error_summary,
+            )
 
 
 # =============================================================================

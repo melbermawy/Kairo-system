@@ -38,6 +38,13 @@ from kairo.hero.dto import (
 )
 from kairo.hero.engines import learning_engine
 from kairo.hero.graphs.opportunities_graph import GraphError, graph_hero_generate_opportunities
+from kairo.hero.observability_store import (
+    classify_f1_run,
+    log_classification,
+    log_run_complete,
+    log_run_fail,
+    log_run_start,
+)
 from kairo.hero.services import external_signals_service
 
 logger = logging.getLogger("kairo.hero.engines.opportunities")
@@ -100,6 +107,14 @@ def generate_today_board(
         },
     )
 
+    # Log run start to observability sink
+    log_run_start(
+        run_id=run_id,
+        brand_id=brand_id,
+        flow="F1_today",
+        trigger_source=trigger_source,
+    )
+
     # Look up brand from DB to validate it exists
     brand = Brand.objects.get(id=brand_id)
 
@@ -160,6 +175,36 @@ def generate_today_board(
             },
         )
 
+        # Log run completion to observability sink
+        log_run_complete(
+            run_id=run_id,
+            brand_id=brand_id,
+            flow="F1_today",
+            status=status,
+            metrics={
+                "opportunities_count": len(opportunities),
+                "invalid_filtered": invalid_count,
+                "duplicates_filtered": dupe_count,
+                "total_candidates": total_candidates,
+            },
+        )
+
+        # Classify and log classification
+        f1_health, f1_reason = classify_f1_run(
+            opportunity_count=total_candidates,
+            valid_opportunity_count=len(opportunities),
+            taboo_violations=0,  # Taboo check happens at package level
+            status="ok",
+        )
+        log_classification(
+            run_id=run_id,
+            brand_id=brand_id,
+            f1_health=f1_health,
+            f2_health=None,
+            run_health=f1_health,
+            reason=f1_reason,
+        )
+
     except GraphError as e:
         logger.error(
             "Graph failed, returning degraded board",
@@ -168,6 +213,31 @@ def generate_today_board(
                 "brand_id": str(brand_id),
                 "error": str(e),
             },
+        )
+
+        # Log run failure to observability sink
+        log_run_fail(
+            run_id=run_id,
+            brand_id=brand_id,
+            flow="F1_today",
+            error=str(e),
+            error_type="GraphError",
+        )
+
+        # Classify and log classification for failed run
+        f1_health, f1_reason = classify_f1_run(
+            opportunity_count=0,
+            valid_opportunity_count=0,
+            taboo_violations=0,
+            status="fail",
+        )
+        log_classification(
+            run_id=run_id,
+            brand_id=brand_id,
+            f1_health=f1_health,
+            f2_health=None,
+            run_health=f1_health,
+            reason=f1_reason,
         )
 
         # Return degraded board with existing opportunities or stub

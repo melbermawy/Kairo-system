@@ -46,6 +46,13 @@ from kairo.hero.graphs.variants_graph import (
     graph_hero_variants_from_package,
 )
 from kairo.hero.llm_client import get_default_client
+from kairo.hero.observability_store import (
+    classify_f2_run,
+    log_classification,
+    log_run_complete,
+    log_run_fail,
+    log_run_start,
+)
 
 logger = logging.getLogger("kairo.hero.engines.content")
 
@@ -149,6 +156,14 @@ def create_package_from_opportunity(
         },
     )
 
+    # Log run start to observability sink
+    log_run_start(
+        run_id=run_id,
+        brand_id=brand_id,
+        flow="F2_package",
+        trigger_source="api",
+    )
+
     # Look up brand and opportunity
     brand = Brand.objects.get(id=brand_id)
     opportunity = Opportunity.objects.get(id=opportunity_id, brand_id=brand_id)
@@ -194,6 +209,16 @@ def create_package_from_opportunity(
                 "error": str(e),
             },
         )
+
+        # Log run failure to observability sink
+        log_run_fail(
+            run_id=run_id,
+            brand_id=brand_id,
+            flow="F2_package",
+            error=str(e),
+            error_type="PackageGraphError",
+        )
+
         raise PackageCreationError(f"Graph failed: {e}", original_error=e) from e
 
     # Validate: reject invalid packages per rubric §7
@@ -236,6 +261,19 @@ def create_package_from_opportunity(
         "Package created successfully",
         extra={
             "run_id": str(run_id),
+            "package_id": str(package.id),
+            "quality_band": draft.quality_band,
+            "package_score": draft.package_score,
+        },
+    )
+
+    # Log run completion to observability sink (partial F2: package only, no variants yet)
+    log_run_complete(
+        run_id=run_id,
+        brand_id=brand_id,
+        flow="F2_package",
+        status="success",
+        metrics={
             "package_id": str(package.id),
             "quality_band": draft.quality_band,
             "package_score": draft.package_score,
@@ -287,8 +325,16 @@ def generate_variants_for_package(
         },
     )
 
-    # Look up package
+    # Look up package first to get brand_id for logging
     package = ContentPackage.objects.select_related("brand").get(id=package_id)
+
+    # Log run start to observability sink
+    log_run_start(
+        run_id=run_id,
+        brand_id=package.brand_id,
+        flow="F2_variants",
+        trigger_source="api",
+    )
 
     # No-regeneration rule: check for existing variants
     existing_count = Variant.objects.filter(package_id=package_id).count()
@@ -332,6 +378,32 @@ def generate_variants_for_package(
                 "error": str(e),
             },
         )
+
+        # Log run failure to observability sink
+        log_run_fail(
+            run_id=run_id,
+            brand_id=package.brand_id,
+            flow="F2_variants",
+            error=str(e),
+            error_type="VariantsGraphError",
+        )
+
+        # Classify and log classification for failed run
+        f2_health, f2_reason = classify_f2_run(
+            package_count=1,  # Package exists
+            variant_count=0,
+            taboo_violations=0,
+            status="fail",
+        )
+        log_classification(
+            run_id=run_id,
+            brand_id=package.brand_id,
+            f1_health="ok",  # Assume F1 was ok if we got to F2
+            f2_health=f2_health,
+            run_health=f2_health,
+            reason=f2_reason,
+        )
+
         raise VariantGenerationError(f"Graph failed: {e}", original_error=e) from e
 
     # Filter invalid variants per rubric (includes engine-level taboo check)
@@ -362,6 +434,36 @@ def generate_variants_for_package(
             "valid_count": len(variants),
             "invalid_count": invalid_count,
         },
+    )
+
+    # Log run completion to observability sink
+    log_run_complete(
+        run_id=run_id,
+        brand_id=package.brand_id,
+        flow="F2_variants",
+        status="success",
+        metrics={
+            "package_id": str(package_id),
+            "valid_count": len(variants),
+            "invalid_count": invalid_count,
+        },
+    )
+
+    # Classify and log classification for successful run
+    f2_health, f2_reason = classify_f2_run(
+        package_count=1,
+        variant_count=len(variants),
+        expected_channels=len(package.channels or []) or 2,  # Default to 2 if not set
+        taboo_violations=0,
+        status="ok",
+    )
+    log_classification(
+        run_id=run_id,
+        brand_id=package.brand_id,
+        f1_health="ok",  # Assume F1 was ok if we got to F2
+        f2_health=f2_health,
+        run_health=f2_health,
+        reason=f2_reason,
     )
 
     return variants
