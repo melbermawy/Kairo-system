@@ -1,0 +1,110 @@
+{
+  "_comment": "Eval fixture external signals for PR-10. Mirrors ExternalSignalBundleDTO shape.",
+  "bundles": {
+    "eval_brand_revops_saas": {
+      "trends": [
+        {
+          "id": "eval_trend_revops_001",
+          "topic": "RevOps tool consolidation trend",
+          "source": "linkedin_trending",
+          "relevance_score": 85.0,
+          "recency_days": 2,
+          "url": "https://example.com/revops-consolidation",
+          "snippet": "Companies are reducing their RevOps stack from 15+ tools to 5 or fewer."
+        },
+        {
+          "id": "eval_trend_revops_002",
+          "topic": "AI in revenue forecasting",
+          "source": "industry_report",
+          "relevance_score": 78.0,
+          "recency_days": 5,
+          "url": null,
+          "snippet": "ML-based forecasting showing 40% accuracy improvement over spreadsheet models."
+        }
+      ],
+      "web_mentions": [
+        {
+          "id": "eval_mention_revops_001",
+          "title": "The State of RevOps 2025",
+          "source": "SaaS Industry Report",
+          "url": "https://example.com/revops-report-2025",
+          "snippet": "Survey of 500+ RevOps leaders on priorities and challenges.",
+          "published_at": "2025-01-10T10:00:00Z",
+          "relevance_score": 92.0
+        }
+      ],
+      "competitor_posts": [
+        {
+          "id": "eval_comp_revops_001",
+          "competitor_name": "DataSync Pro",
+          "channel": "linkedin",
+          "post_url": "https://linkedin.com/posts/datasyncpro/data-quality",
+          "post_snippet": "We just shipped automatic data deduplication. No more manual cleanup!",
+          "engagement_hint": "high",
+          "published_at": "2025-01-08T14:30:00Z"
+        }
+      ],
+      "social_moments": [
+        {
+          "id": "eval_moment_revops_001",
+          "description": "#RevOps2025 conference hashtag trending",
+          "channel": "x",
+          "relevance_hint": "Target audience actively discussing RevOps priorities",
+          "recency_hours": 12,
+          "url": null
+        }
+      ]
+    },
+    "eval_brand_devtools": {
+      "trends": [
+        {
+          "id": "eval_trend_dev_001",
+          "topic": "AI-assisted code review adoption",
+          "source": "github_insights",
+          "relevance_score": 90.0,
+          "recency_days": 1,
+          "url": "https://example.com/ai-code-review",
+          "snippet": "65% of engineering teams now using some form of AI in their PR review process."
+        }
+      ],
+      "web_mentions": [],
+      "competitor_posts": [
+        {
+          "id": "eval_comp_dev_001",
+          "competitor_name": "CodeBot AI",
+          "channel": "x",
+          "post_url": null,
+          "post_snippet": "Thread: Why we rebuilt our entire code review engine with LLMs",
+          "engagement_hint": "viral",
+          "published_at": "2025-01-05T09:00:00Z"
+        }
+      ],
+      "social_moments": []
+    },
+    "eval_brand_b2c_lifestyle": {
+      "trends": [
+        {
+          "id": "eval_trend_wellness_001",
+          "topic": "Micro-meditation in workplace",
+          "source": "wellness_research",
+          "relevance_score": 82.0,
+          "recency_days": 3,
+          "url": "https://example.com/micro-meditation-study",
+          "snippet": "Studies show 5-minute meditation breaks improve focus by 23%."
+        }
+      ],
+      "web_mentions": [],
+      "competitor_posts": [],
+      "social_moments": [
+        {
+          "id": "eval_moment_wellness_001",
+          "description": "#MindfulMonday trending with executive wellness content",
+          "channel": "linkedin",
+          "relevance_hint": "High engagement from target executive audience",
+          "recency_hours": 6,
+          "url": null
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,234 @@
+{
+  "run_id": "11ca8071-1362-45e0-a119-4b2c177d8260",
+  "brand_slug": "eval-revops-saas",
+  "timestamp": "2025-12-13T18:45:39.166880+00:00",
+  "llm_disabled": true,
+  "status": "completed",
+  "stage_status": {
+    "f1_status": "ok",
+    "f2_status": "ok",
+    "failure_reason": null,
+    "is_structurally_valid": true
+  },
+  "quality_labels": {
+    "f1_label": "good",
+    "f2_label": "partial",
+    "run_label": "partial"
+  },
+  "metrics": {
+    "opportunity_count": 8,
+    "valid_opportunity_count": 8,
+    "package_count": 5,
+    "variant_count": 10,
+    "taboo_violations": 0,
+    "f1_status": "ok",
+    "f2_status": "ok",
+    "opportunity_coverage": 0.0,
+    "avg_opportunity_score": 82.0,
+    "golden_match_count": 0
+  },
+  "case": {
+    "eval_brand_id": "eval_brand_revops_saas",
+    "brand_name": "RevOps Intelligence",
+    "opportunities": [
+      {
+        "id": "3c0ab498-50ff-569f-879d-38f9546eba7b",
+        "title": "Weekly insights for executive decision makers",
+        "angle": "Unique angle 7: This stub opportunity demonstrates the value we deliver to our target personas through clear communication and actionable insights.",
+        "type": "evergreen",
+        "primary_channel": "x",
+        "score": 89.0,
+        "is_valid": true
+      },
+      {
+        "id": "97bfbcd2-65bf-5af8-98e4-57eae2b2a02b",
+        "title": "Behind the scenes product development journey",
+        "angle": "Unique angle 6: This stub opportunity demonstrates the value we deliver to our target personas through clear communication and actionable insights.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 87.0,
+        "is_valid": true
+      },
+      {
+        "id": "d960cb88-1400-5153-9832-af9f8cbc285b",
+        "title": "Industry report highlights emerging technology trends",
+        "angle": "Unique angle 5: This stub opportunity demonstrates the value we deliver to our target personas through clear communication and actionable insights.",
+        "type": "evergreen",
+        "primary_channel": "x",
+        "score": 85.0,
+        "is_valid": true
+      },
+      {
+        "id": "1b25f36e-485a-5d40-9b9b-3e43ca9fe0f0",
+        "title": "Customer success stories drive social proof",
+        "angle": "Unique angle 4: This stub opportunity demonstrates the value we deliver to our target personas through clear communication and actionable insights.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 83.0,
+        "is_valid": true
+      },
+      {
+        "id": "bd6df406-ddab-59b3-9931-b0214a0ef40d",
+        "title": "Competitive analysis reveals market positioning gaps",
+        "angle": "Unique angle 3: This stub opportunity demonstrates the value we deliver to our target personas through clear communication and actionable insights.",
+        "type": "campaign",
+        "primary_channel": "x",
+        "score": 81.0,
+        "is_valid": true
+      },
+      {
+        "id": "c4050efb-340b-55d6-ab28-2f5c5cda3eae",
+        "title": "Building trust through transparent communication",
+        "angle": "Unique angle 2: This stub opportunity demonstrates the value we deliver to our target personas through clear communication and actionable insights.",
+        "type": "competitive",
+        "primary_channel": "linkedin",
+        "score": 79.0,
+        "is_valid": true
+      },
+      {
+        "id": "c4a9e2b6-f2ba-5149-8eed-933068dbdfd5",
+        "title": "Revenue forecasting accuracy improvements with data science",
+        "angle": "Unique angle 1: This stub opportunity demonstrates the value we deliver to our target personas through clear communication and actionable insights.",
+        "type": "evergreen",
+        "primary_channel": "x",
+        "score": 77.0,
+        "is_valid": true
+      },
+      {
+        "id": "211bf029-224e-5fe6-b51b-d50bede0f24c",
+        "title": "AI automation transforming customer workflows today",
+        "angle": "Unique angle 0: This stub opportunity demonstrates the value we deliver to our target personas through clear communication and actionable insights.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 75.0,
+        "is_valid": true
+      }
+    ],
+    "packages": [
+      {
+        "id": "0e79f792-8a94-4962-a294-7cda501f0dc8",
+        "title": "Package: Weekly insights for executive decision makers",
+        "status": "draft",
+        "channels": [
+          "x",
+          "linkedin"
+        ],
+        "origin_opportunity_id": "3c0ab498-50ff-569f-879d-38f9546eba7b"
+      },
+      {
+        "id": "a874e518-2956-447f-903a-21f0a9ce6802",
+        "title": "Package: Behind the scenes product development journey",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "x"
+        ],
+        "origin_opportunity_id": "97bfbcd2-65bf-5af8-98e4-57eae2b2a02b"
+      },
+      {
+        "id": "aa9d79fb-8aa8-4fdf-8e96-b5431ca7f963",
+        "title": "Package: Industry report highlights emerging technology tre",
+        "status": "draft",
+        "channels": [
+          "x",
+          "linkedin"
+        ],
+        "origin_opportunity_id": "d960cb88-1400-5153-9832-af9f8cbc285b"
+      },
+      {
+        "id": "0851319e-5b3b-47e8-956d-df985b6c3e3c",
+        "title": "Package: Customer success stories drive social proof",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "x"
+        ],
+        "origin_opportunity_id": "1b25f36e-485a-5d40-9b9b-3e43ca9fe0f0"
+      },
+      {
+        "id": "538d94f8-818c-4d07-9069-efb9dff2baa1",
+        "title": "Package: Competitive analysis reveals market positioning ga",
+        "status": "draft",
+        "channels": [
+          "x",
+          "linkedin"
+        ],
+        "origin_opportunity_id": "bd6df406-ddab-59b3-9931-b0214a0ef40d"
+      }
+    ],
+    "variants": [
+      {
+        "id": "b7cfc443-9c97-4453-9c71-4bf59ed9c107",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "0e79f792-8a94-4962-a294-7cda501f0dc8",
+        "body_preview": "Key insight: value and transparency drive trust.\n\nWhen you focus on clear communication, everything "
+      },
+      {
+        "id": "0a6bcd08-40f0-42a1-8e15-212fd190c4eb",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "0e79f792-8a94-4962-a294-7cda501f0dc8",
+        "body_preview": "Here's what we've learned about this opportunity:\n\nThe key insight is that our audience cares deeply"
+      },
+      {
+        "id": "c139e455-87e4-4afa-9864-defd5a3a0544",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "a874e518-2956-447f-903a-21f0a9ce6802",
+        "body_preview": "Here's what we've learned about this opportunity:\n\nThe key insight is that our audience cares deeply"
+      },
+      {
+        "id": "8a2e4279-3c15-429c-ba88-b9f13147db1b",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "a874e518-2956-447f-903a-21f0a9ce6802",
+        "body_preview": "Key insight: value and transparency drive trust.\n\nWhen you focus on clear communication, everything "
+      },
+      {
+        "id": "7150209c-ac9a-4a93-8297-6a5716631d56",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "aa9d79fb-8aa8-4fdf-8e96-b5431ca7f963",
+        "body_preview": "Key insight: value and transparency drive trust.\n\nWhen you focus on clear communication, everything "
+      },
+      {
+        "id": "cd8d9190-dc7c-437e-8519-2769a3329b8c",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "aa9d79fb-8aa8-4fdf-8e96-b5431ca7f963",
+        "body_preview": "Here's what we've learned about this opportunity:\n\nThe key insight is that our audience cares deeply"
+      },
+      {
+        "id": "4e1130ae-ebbf-4597-9574-732443b1850d",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "0851319e-5b3b-47e8-956d-df985b6c3e3c",
+        "body_preview": "Here's what we've learned about this opportunity:\n\nThe key insight is that our audience cares deeply"
+      },
+      {
+        "id": "8cdc4157-f00f-4f5e-98b6-79c67b171c17",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "0851319e-5b3b-47e8-956d-df985b6c3e3c",
+        "body_preview": "Key insight: value and transparency drive trust.\n\nWhen you focus on clear communication, everything "
+      },
+      {
+        "id": "048272d5-f543-482a-933c-24e4a0a2afb8",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "538d94f8-818c-4d07-9069-efb9dff2baa1",
+        "body_preview": "Key insight: value and transparency drive trust.\n\nWhen you focus on clear communication, everything "
+      },
+      {
+        "id": "974da8b1-65f3-43de-975a-aed314bbcbe7",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "538d94f8-818c-4d07-9069-efb9dff2baa1",
+        "body_preview": "Here's what we've learned about this opportunity:\n\nThe key insight is that our audience cares deeply"
+      }
+    ],
+    "warnings": []
+  },
+  "errors": []
+}

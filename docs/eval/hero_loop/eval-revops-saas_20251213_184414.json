@@ -1,0 +1,75 @@
+{
+  "run_id": "1ad22a22-e829-4358-a7cf-541835f49bd8",
+  "brand_slug": "eval-revops-saas",
+  "timestamp": "2025-12-13T18:44:14.720722+00:00",
+  "llm_disabled": true,
+  "status": "completed",
+  "stage_status": {
+    "f1_status": "ok",
+    "f2_status": "ok",
+    "failure_reason": null,
+    "is_structurally_valid": true
+  },
+  "quality_labels": {
+    "f1_label": "bad",
+    "f2_label": "partial",
+    "run_label": "bad"
+  },
+  "metrics": {
+    "opportunity_count": 1,
+    "valid_opportunity_count": 1,
+    "package_count": 1,
+    "variant_count": 2,
+    "taboo_violations": 0,
+    "f1_status": "ok",
+    "f2_status": "ok",
+    "opportunity_coverage": 0.0,
+    "avg_opportunity_score": 77.0,
+    "golden_match_count": 0
+  },
+  "case": {
+    "eval_brand_id": "eval_brand_revops_saas",
+    "brand_name": "RevOps Intelligence",
+    "opportunities": [
+      {
+        "id": "ad7aa982-df2b-59a9-b265-ea6ff76361f7",
+        "title": "Stub opportunity 7: Industry insight that resonates with our audience",
+        "angle": "This stub opportunity demonstrates the value we deliver to our target personas through clear communication.",
+        "type": "evergreen",
+        "primary_channel": "x",
+        "score": 77.0,
+        "is_valid": true
+      }
+    ],
+    "packages": [
+      {
+        "id": "687b9da0-d558-4ea2-87da-da90b6939b69",
+        "title": "Package: Stub opportunity 7: Industry insight that resonate",
+        "status": "draft",
+        "channels": [
+          "x",
+          "linkedin"
+        ],
+        "origin_opportunity_id": "ad7aa982-df2b-59a9-b265-ea6ff76361f7"
+      }
+    ],
+    "variants": [
+      {
+        "id": "c3ff3386-cba7-4b54-a664-ae7c00183cb3",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "687b9da0-d558-4ea2-87da-da90b6939b69",
+        "body_preview": "Key insight: value and transparency drive trust.\n\nWhen you focus on clear communication, everything "
+      },
+      {
+        "id": "64d67105-7561-4296-9fce-8097d751dd2e",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "687b9da0-d558-4ea2-87da-da90b6939b69",
+        "body_preview": "Here's what we've learned about this opportunity:\n\nThe key insight is that our audience cares deeply"
+      }
+    ],
+    "warnings": []
+  },
+  "errors": []
+}

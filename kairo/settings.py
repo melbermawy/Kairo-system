@@ -50,6 +50,9 @@ INSTALLED_APPS = [
     # Kairo apps
     "kairo.core",
     "kairo.hero",
+    "kairo.ingestion",
+    # Integrations
+    "kairo.integrations.apify.apps.ApifyConfig",
     # PRD-1: out of scope for PR-0 - future apps:
     # "kairo.engines.brand_brain",
     # "kairo.engines.opportunities",
@@ -107,6 +110,60 @@ DATABASES = {
         conn_health_checks=True,
     )
 }
+
+
+# =============================================================================
+# DEV SAFETY CHECK: Detect rogue DATABASE_URL override
+# =============================================================================
+# Only runs in DEBUG mode. Warns if DATABASE_URL points to localhost but .env
+# contains a non-localhost URL (indicating shell env is overriding .env).
+# See docs/notes/dev_env_database_url_fix.md for resolution steps.
+
+def _check_database_url_override():
+    """Warn if DATABASE_URL appears to be overridden by shell environment."""
+    if not DEBUG:
+        return
+
+    # Check if DATABASE_URL points to localhost
+    if "localhost" not in DATABASE_URL and "127.0.0.1" not in DATABASE_URL:
+        return
+
+    # Read .env to see what it contains
+    env_path = BASE_DIR / ".env"
+    if not env_path.exists():
+        return
+
+    try:
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("DATABASE_URL="):
+                    env_value = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    # If .env has non-localhost but we're using localhost, warn
+                    if "localhost" not in env_value and "127.0.0.1" not in env_value:
+                        import sys
+                        print(
+                            "\n"
+                            "\033[93m" + "=" * 70 + "\033[0m\n"
+                            "\033[93m⚠️  WARNING: DATABASE_URL overridden by shell environment!\033[0m\n"
+                            "\033[93m" + "=" * 70 + "\033[0m\n"
+                            f"  Current:  {DATABASE_URL[:60]}...\n"
+                            f"  .env has: {env_value[:60]}...\n"
+                            "\n"
+                            "  Your shell has a rogue DATABASE_URL export.\n"
+                            "  See: docs/notes/dev_env_database_url_fix.md\n"
+                            "\n"
+                            "  Quick fix: unset DATABASE_URL\n"
+                            "  Or use:    python scripts/run_manage.py <command>\n"
+                            "\033[93m" + "=" * 70 + "\033[0m\n",
+                            file=sys.stderr,
+                        )
+                    break
+    except Exception:
+        pass  # Don't crash on check failure
+
+
+_check_database_url_override()
 
 
 # =============================================================================
@@ -204,6 +261,23 @@ LOGGING = {
         },
     },
 }
+
+
+# =============================================================================
+# EXTERNAL SIGNALS MODE
+# =============================================================================
+# Controls whether external signals come from fixtures or ingestion pipeline.
+# - "fixtures": Use fixture-based loader (default, for tests)
+# - "ingestion": Use real ingested TrendCandidates only (NO FALLBACK)
+EXTERNAL_SIGNALS_MODE = os.environ.get("EXTERNAL_SIGNALS_MODE", "fixtures")
+
+
+# =============================================================================
+# APIFY INTEGRATION
+# =============================================================================
+# Per brandbrain_spec_skeleton.md §7: Apify Integration Contract
+APIFY_TOKEN = os.environ.get("APIFY_TOKEN", "")
+APIFY_BASE_URL = os.environ.get("APIFY_BASE_URL", "https://api.apify.com")
 
 
 # =============================================================================

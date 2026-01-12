@@ -1,0 +1,107 @@
+{
+  "run_id": "d5748409-6a65-4b3a-a1aa-f269cdc52dc7",
+  "brand_slug": "eval-revops-saas",
+  "timestamp": "2025-12-13T18:53:13.457623+00:00",
+  "llm_disabled": false,
+  "status": "failed",
+  "stage_status": {
+    "f1_status": "degraded",
+    "f2_status": "failed",
+    "failure_reason": "graph_error",
+    "is_structurally_valid": false
+  },
+  "quality_labels": {
+    "f1_label": null,
+    "f2_label": null,
+    "run_label": "invalid"
+  },
+  "metrics": {
+    "opportunity_count": 6,
+    "valid_opportunity_count": 6,
+    "package_count": 1,
+    "variant_count": 0,
+    "taboo_violations": 0,
+    "f1_status": "degraded",
+    "f2_status": "failed"
+  },
+  "case": {
+    "eval_brand_id": "eval_brand_revops_saas",
+    "brand_name": "RevOps Intelligence",
+    "opportunities": [
+      {
+        "id": "822e2390-95cc-5398-961a-78a661bef3d4",
+        "title": "Industry trend: AI adoption in RevOps Intelligence's sector",
+        "angle": "Rising discussion about AI tools - opportunity to share our perspective on practical implementation.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 75.0,
+        "is_valid": true
+      },
+      {
+        "id": "a143778f-a046-531e-a5a1-ce6a8df5fdf0",
+        "title": "Weekly thought leadership post",
+        "angle": "Regular cadence content about our core expertise area.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 72.0,
+        "is_valid": true
+      },
+      {
+        "id": "080d1089-e797-5ad4-ad45-b106327a10b2",
+        "title": "Customer success story",
+        "angle": "Recent customer achieved notable results - great case study material.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 70.0,
+        "is_valid": true
+      },
+      {
+        "id": "db53b745-d137-5632-92a1-9ce5139f6ae6",
+        "title": "Competitor announcement response",
+        "angle": "Competitor just announced a feature - opportunity to differentiate our approach.",
+        "type": "competitive",
+        "primary_channel": "x",
+        "score": 68.0,
+        "is_valid": true
+      },
+      {
+        "id": "2ece32b1-19c8-5847-84da-e14a2084df69",
+        "title": "Industry report commentary",
+        "angle": "New industry report released - can provide contrarian take aligned with our positioning.",
+        "type": "trend",
+        "primary_channel": "x",
+        "score": 65.0,
+        "is_valid": true
+      },
+      {
+        "id": "1cbda036-b3d2-5e87-9415-720b3ffe5c47",
+        "title": "Behind the scenes: Product development",
+        "angle": "Authenticity content showing how we build - builds trust with audience.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 60.0,
+        "is_valid": true
+      }
+    ],
+    "packages": [
+      {
+        "id": "66233e51-d492-4884-8f82-1ceafdc0d4b2",
+        "title": "Practical AI Implementation in RevOps: Beyond the Hype",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "822e2390-95cc-5398-961a-78a661bef3d4"
+      }
+    ],
+    "variants": [],
+    "warnings": [
+      "Error processing opportunity 822e2390-95cc-5398-961a-78a661bef3d4: Graph failed: Output parsing failed: Schema validation failed: variants.0.body: Field required; variants.1.body: Field required. Raw text: ```json\n{\n  \"variants\": [\n    {\n      \"channel\": \"linkedin\",\n      \"content\": \"AI in RevOps: Are you focusing on the right things? \\n\\nWhile AI is the buzzword of the decade, its true value in RevOps ...",
+      "Error processing opportunity a143778f-a046-531e-a5a1-ce6a8df5fdf0: Package failed rubric validation: thesis doesn't clearly link to opportunity (\u00a75.6)"
+    ]
+  },
+  "errors": [
+    "Stage failure: graph_error"
+  ]
+}

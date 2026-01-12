@@ -1,0 +1,182 @@
+{
+  "run_id": "3295a614-3967-40df-bcca-b7318851075c",
+  "brand_slug": "eval-revops-saas",
+  "timestamp": "2025-12-15T17:00:48.944970+00:00",
+  "llm_disabled": false,
+  "status": "failed",
+  "stage_status": {
+    "f1_status": "degraded",
+    "f2_status": "failed",
+    "failure_reason": "graph_error",
+    "is_structurally_valid": false
+  },
+  "quality_labels": {
+    "f1_label": null,
+    "f2_label": null,
+    "run_label": "invalid"
+  },
+  "metrics": {
+    "opportunity_count": 12,
+    "valid_opportunity_count": 12,
+    "package_count": 3,
+    "variant_count": 0,
+    "taboo_violations": 0,
+    "f1_status": "degraded",
+    "f2_status": "failed"
+  },
+  "case": {
+    "eval_brand_id": "eval_brand_revops_saas",
+    "brand_name": "RevOps Intelligence",
+    "opportunities": [
+      {
+        "id": "2c1645c3-39df-576b-bdc7-55d5b641f66d",
+        "title": "The Role of AI in RevOps: Transforming Revenue Strategies",
+        "angle": "Examine how AI technologies are being integrated into RevOps to enhance decision-making and efficiency.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 85.0,
+        "is_valid": true
+      },
+      {
+        "id": "fa02c59f-32ea-5c7f-b03f-9b1724673248",
+        "title": "The Impact of Remote Work on RevOps Strategies",
+        "angle": "Discuss how the shift to remote work has influenced RevOps strategies and what companies can do to adapt.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 80.0,
+        "is_valid": true
+      },
+      {
+        "id": "c0bf0e8f-ed8d-5ec7-9e0a-b6f564ac7211",
+        "title": "The Future of RevOps: Automation Trends to Watch",
+        "angle": "Explore the latest automation trends in RevOps and how they are shaping the future of B2B SaaS revenue teams.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 80.0,
+        "is_valid": true
+      },
+      {
+        "id": "4f7a907a-9352-5839-b864-45a12af1ecd0",
+        "title": "RevOps Tools: Choosing the Right Tech Stack",
+        "angle": "Guide revenue teams in selecting the most effective tools and technologies for their RevOps needs.",
+        "type": "evergreen",
+        "primary_channel": "x",
+        "score": 75.0,
+        "is_valid": true
+      },
+      {
+        "id": "3fe8b9cf-7c6a-58f5-b18d-32bf8a6fa962",
+        "title": "RevOps Metrics That Matter: A Data-Driven Approach",
+        "angle": "Identify the key metrics that revenue teams should focus on to drive performance and growth.",
+        "type": "evergreen",
+        "primary_channel": "x",
+        "score": 75.0,
+        "is_valid": true
+      },
+      {
+        "id": "8b1b4526-ad81-54ef-a21e-ddda74872997",
+        "title": "Industry trend: AI adoption in RevOps Intelligence's sector",
+        "angle": "Rising discussion about AI tools - opportunity to share our perspective on practical implementation.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 75.0,
+        "is_valid": true
+      },
+      {
+        "id": "ffa6bccb-f5ea-5f52-9383-a8617af91428",
+        "title": "Weekly thought leadership post",
+        "angle": "Regular cadence content about our core expertise area.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 72.0,
+        "is_valid": true
+      },
+      {
+        "id": "b21c0b00-ca4e-5d59-9342-3ad9c85af9fd",
+        "title": "Aligning Sales and Marketing Through RevOps",
+        "angle": "Provide strategies for aligning sales and marketing teams to drive revenue growth through RevOps.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 70.0,
+        "is_valid": true
+      },
+      {
+        "id": "b6414bbf-d833-5507-9595-1c869b1045eb",
+        "title": "Building a Unified RevOps Team: Best Practices",
+        "angle": "Share best practices for creating a cohesive RevOps team that aligns sales, marketing, and customer success.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 70.0,
+        "is_valid": true
+      },
+      {
+        "id": "0329ba32-9ca8-553a-a212-b3cb9a0177a7",
+        "title": "Unified RevOps Automation: The Key to Predictable Growth",
+        "angle": "Discuss the importance of unified RevOps automation in achieving predictable growth for B2B SaaS companies.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 70.0,
+        "is_valid": true
+      },
+      {
+        "id": "13f5b647-b105-57d6-abf0-21433a7f0b27",
+        "title": "Customer success story",
+        "angle": "Recent customer achieved notable results - great case study material.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 70.0,
+        "is_valid": true
+      },
+      {
+        "id": "0d940039-5ec9-54dc-a1c8-0abc74b974fa",
+        "title": "Competitor announcement response",
+        "angle": "Competitor just announced a feature - opportunity to differentiate our approach.",
+        "type": "competitive",
+        "primary_channel": "x",
+        "score": 68.0,
+        "is_valid": true
+      }
+    ],
+    "packages": [
+      {
+        "id": "4fc7d3e2-40e1-4c68-bb54-31cb39461fa5",
+        "title": "Harnessing AI for Smarter RevOps: A Deep Dive into Transformative Strategies",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "2c1645c3-39df-576b-bdc7-55d5b641f66d"
+      },
+      {
+        "id": "c00d04e2-401a-4934-98fb-e854bd564bbc",
+        "title": "Adapting RevOps Strategies for a Remote-First World",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "fa02c59f-32ea-5c7f-b03f-9b1724673248"
+      },
+      {
+        "id": "13609b63-9399-48c7-a1a6-99b09bce8388",
+        "title": "RevOps Automation: Trends Shaping the Future of B2B SaaS",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "c0bf0e8f-ed8d-5ec7-9e0a-b6f564ac7211"
+      }
+    ],
+    "variants": [],
+    "warnings": [
+      "Error processing opportunity 2c1645c3-39df-576b-bdc7-55d5b641f66d: Package 4fc7d3e2-40e1-4c68-bb54-31cb39461fa5 already has 3 variants. Regeneration is not supported in PRD-1.",
+      "Error processing opportunity fa02c59f-32ea-5c7f-b03f-9b1724673248: Package c00d04e2-401a-4934-98fb-e854bd564bbc already has 3 variants. Regeneration is not supported in PRD-1.",
+      "Error processing opportunity c0bf0e8f-ed8d-5ec7-9e0a-b6f564ac7211: Package 13609b63-9399-48c7-a1a6-99b09bce8388 already has 3 variants. Regeneration is not supported in PRD-1."
+    ]
+  },
+  "errors": [
+    "Stage failure: graph_error"
+  ]
+}

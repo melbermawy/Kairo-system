@@ -1,0 +1,228 @@
+{
+  "run_id": "679c3449-a647-4910-9fc4-3d605782a799",
+  "brand_slug": "eval-revops-saas",
+  "timestamp": "2025-12-15T17:32:32.203334+00:00",
+  "llm_disabled": false,
+  "status": "completed",
+  "stage_status": {
+    "f1_status": "ok",
+    "f2_status": "ok",
+    "failure_reason": null,
+    "is_structurally_valid": true
+  },
+  "quality_labels": {
+    "f1_label": "partial",
+    "f2_label": "partial",
+    "run_label": "partial"
+  },
+  "metrics": {
+    "opportunity_count": 10,
+    "valid_opportunity_count": 10,
+    "package_count": 3,
+    "variant_count": 9,
+    "taboo_violations": 0,
+    "f1_status": "ok",
+    "f2_status": "ok",
+    "opportunity_coverage": 0.5,
+    "avg_opportunity_score": 85.3,
+    "golden_match_count": 1
+  },
+  "case": {
+    "eval_brand_id": "eval_brand_revops_saas",
+    "brand_name": "RevOps Intelligence",
+    "opportunities": [
+      {
+        "id": "81c0964e-0e87-5e9d-ab3b-3561cc0ce0f5",
+        "title": "AI in RevOps: Where It Helps Today (and Where It Quietly Makes Data Worse)",
+        "angle": "Contrarian take: AI doesn\u2019t fix broken data; it amplifies it. Outline high-confidence use cases (dedupe suggestions, enrichment validation, call summarization QA) vs. risky ones (auto-updating CRM fields without governance).",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 92.0,
+        "is_valid": true
+      },
+      {
+        "id": "68f5c933-1aeb-5bc4-a8b9-dcba4336b079",
+        "title": "The Hidden Cost of \u201cOne More Tool\u201d: A RevOps ROI Framework for Consolidation vs. Integration",
+        "angle": "Tool sprawl isn\u2019t just license cost\u2014it\u2019s reconciliation time, broken automations, and inconsistent attribution. Provide a simple ROI model to decide: consolidate, integrate, or retire\u2014based on data criticality and workflow dependency.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 90.0,
+        "is_valid": true
+      },
+      {
+        "id": "e540c8ed-3362-5b4c-82e2-a9c0263cf13b",
+        "title": "The RevOps Data Contract: A Practical Spec for Lead, Account, and Opportunity Fields",
+        "angle": "Most \u201cdata quality\u201d initiatives fail because they\u2019re vague. Define a RevOps data contract (field definitions, allowed values, ownership, SLAs, and change control) so every system and team aligns on what each object/field means\u2014and automation stops breaking silently.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 88.0,
+        "is_valid": true
+      },
+      {
+        "id": "c524ccd1-82ad-5e5b-80ac-a6f1371d6ba4",
+        "title": "RevOps Observability: The Missing Layer for Catching Broken Routing, Sync Failures, and Silent Data Drift",
+        "angle": "Treat RevOps like production systems: you need monitoring, alerts, and audit trails. Explain what to instrument (lead routing latency, sync error rates, field drift, enrichment failures) and how observability prevents revenue-impacting incidents.",
+        "type": "evergreen",
+        "primary_channel": "x",
+        "score": 88.0,
+        "is_valid": true
+      },
+      {
+        "id": "da3de25c-69f4-50d6-8e1f-50969488fd1c",
+        "title": "Stop Building Dashboards: Build a Revenue Source of Truth (and Let Dashboards Be a Byproduct)",
+        "angle": "Dashboards don\u2019t create alignment; shared definitions and governed pipelines do. The thesis: invest first in a unified revenue data model + transformation layer, then dashboards become consistent across Finance, Sales, and CS without constant rework.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 86.0,
+        "is_valid": true
+      },
+      {
+        "id": "9649f9a7-084b-572e-a72f-feeb70a65275",
+        "title": "The RevOps Automation Maturity Model: From \u201cZapier Chaos\u201d to Governed Workflows",
+        "angle": "Automation often starts as quick fixes and becomes brittle. Map a maturity model (ad hoc \u2192 standardized \u2192 governed \u2192 observable) and show what to implement at each stage: naming conventions, versioning, testing, monitoring, and ownership.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 85.0,
+        "is_valid": true
+      },
+      {
+        "id": "5b897a6b-ed79-5423-9e93-77b973763269",
+        "title": "Forecasting Without Heroics: A Simple Method to Reconcile CRM, Billing, and Product Usage",
+        "angle": "Forecast accuracy improves when CRM is reconciled with billing and product signals. Share a method to align definitions (bookings vs. revenue), handle renewals/expansions, and create a reconciliation cadence that Finance trusts.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 84.0,
+        "is_valid": true
+      },
+      {
+        "id": "2abae70c-0e91-5511-8d9f-08bb2d891765",
+        "title": "The 30-Minute RevOps Audit: 10 Questions That Reveal Your Biggest Data Silo Risks",
+        "angle": "A fast diagnostic that surfaces where silos are hurting revenue operations: duplicate accounts, inconsistent lifecycle stages, missing ownership, broken routing, unmonitored automations, and conflicting definitions across teams.",
+        "type": "campaign",
+        "primary_channel": "linkedin",
+        "score": 82.0,
+        "is_valid": true
+      },
+      {
+        "id": "cff29405-e517-57cb-8668-bbce0e65626e",
+        "title": "Pipeline Hygiene That Actually Predicts Revenue: 7 Rules You Can Enforce Automatically",
+        "angle": "Most pipeline hygiene is subjective and unenforced. Define objective rules (e.g., stage entry criteria, next step required, close date change limits, stale opp detection) and show how automation enforces them without relying on rep discipline.",
+        "type": "evergreen",
+        "primary_channel": "x",
+        "score": 80.0,
+        "is_valid": true
+      },
+      {
+        "id": "82d66582-d5e8-59a1-bbe0-dd5837ad2080",
+        "title": "The Death of Third-Party Cookies Isn\u2019t the Story\u2014Identity Resolution in Your CRM Is",
+        "angle": "The real impact of privacy changes is internal: fragmented identities across product, marketing, and sales systems. Explain how to build reliable identity resolution (account matching, contact stitching, domain logic) to keep pipeline reporting credible.",
+        "type": "trend",
+        "primary_channel": "x",
+        "score": 78.0,
+        "is_valid": true
+      }
+    ],
+    "packages": [
+      {
+        "id": "3f814145-6acb-43c8-9722-5a6e7589eff9",
+        "title": "AI in RevOps Without the Data Hangover: Safe Wins, Red Flags, and a Governance Line in the Sand",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "x",
+          "newsletter"
+        ],
+        "origin_opportunity_id": "81c0964e-0e87-5e9d-ab3b-3561cc0ce0f5"
+      },
+      {
+        "id": "1bc55936-9f73-48ed-b7eb-9a92d13bf411",
+        "title": "Stop Buying \u201cOne More Tool\u201d: A 30-Min RevOps ROI Scorecard to Consolidate, Integrate, or Retire",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter",
+          "x"
+        ],
+        "origin_opportunity_id": "68f5c933-1aeb-5bc4-a8b9-dcba4336b079"
+      },
+      {
+        "id": "4ae294c1-98d5-43ca-9786-2a24103c32fd",
+        "title": "Stop Silent Automation Failures: Ship a RevOps Data Contract for Leads, Accounts & Opportunities",
+        "status": "draft",
+        "channels": [
+          "linkedin",
+          "newsletter",
+          "x"
+        ],
+        "origin_opportunity_id": "e540c8ed-3362-5b4c-82e2-a9c0263cf13b"
+      }
+    ],
+    "variants": [
+      {
+        "id": "8aefb491-bcd6-4fab-8d8f-8b06023e8d8d",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "3f814145-6acb-43c8-9722-5a6e7589eff9",
+        "body_preview": "If your AI can write to your CRM, you don\u2019t have \u201cautomation.\u201d You have an incident waiting to happe"
+      },
+      {
+        "id": "dc02e9c7-d843-412b-8396-28880d37b442",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "3f814145-6acb-43c8-9722-5a6e7589eff9",
+        "body_preview": "Hot take: AI shouldn\u2019t write to your CRM (yet). Use it to *propose + audit*, not execute.\n\n3 read-on"
+      },
+      {
+        "id": "1bcd2440-6f1a-4eb1-b189-a03f5628b263",
+        "channel": "newsletter",
+        "status": "draft",
+        "package_id": "3f814145-6acb-43c8-9722-5a6e7589eff9",
+        "body_preview": "Subject: AI in RevOps Without the Data Hangover\n\nTeam,\n\nMost RevOps AI rollouts fail in a predictabl"
+      },
+      {
+        "id": "42e2d7f5-0d77-4b65-99bc-7a781a23b49e",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "1bc55936-9f73-48ed-b7eb-9a92d13bf411",
+        "body_preview": "\u201cOne more tool\u201d is how RevOps budgets die\u2014quietly, in reconciliation time.\n\nIf you can\u2019t quantify wh"
+      },
+      {
+        "id": "754927f2-a832-47a8-af28-d49004334eec",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "1bc55936-9f73-48ed-b7eb-9a92d13bf411",
+        "body_preview": "Stop buying \u201cone more tool.\u201d Run a 30-min RevOps ROI scorecard per app:\n\n1) Reconciliation hrs/week\n"
+      },
+      {
+        "id": "f5ee6e96-0bed-42d2-9683-d28635516822",
+        "channel": "newsletter",
+        "status": "draft",
+        "package_id": "1bc55936-9f73-48ed-b7eb-9a92d13bf411",
+        "body_preview": "Subject: Your stack isn\u2019t \u201cmodern.\u201d It\u2019s expensive reconciliation.\n\nHey team,\n\nMost RevOps stacks do"
+      },
+      {
+        "id": "743acea0-fe37-4eb6-87b9-39eb27dfe942",
+        "channel": "linkedin",
+        "status": "draft",
+        "package_id": "4ae294c1-98d5-43ca-9786-2a24103c32fd",
+        "body_preview": "Most RevOps automation doesn\u2019t \u201cbreak.\u201d It just starts lying quietly.\n\nIf your lead routing, lifecyc"
+      },
+      {
+        "id": "9edd29c3-d6c8-41f5-8c1c-39a1dd2bf08a",
+        "channel": "x",
+        "status": "draft",
+        "package_id": "4ae294c1-98d5-43ca-9786-2a24103c32fd",
+        "body_preview": "Most RevOps automation doesn\u2019t break\u2014it drifts.\n\nStop vague \u201cdata quality\u201d work. Ship a RevOps data "
+      },
+      {
+        "id": "c5d96261-d1ad-4c05-86b6-a6074dce8520",
+        "channel": "newsletter",
+        "status": "draft",
+        "package_id": "4ae294c1-98d5-43ca-9786-2a24103c32fd",
+        "body_preview": "Subject: Your automations aren\u2019t broken. They\u2019re drifting.\n\nHi team,\n\nHere\u2019s the pattern I keep seei"
+      }
+    ],
+    "warnings": []
+  },
+  "errors": []
+}

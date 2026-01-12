@@ -1,0 +1,96 @@
+{
+  "run_id": "a4536dd1-1634-4d37-9468-e3a6268931a0",
+  "brand_slug": "eval-revops-saas",
+  "timestamp": "2025-12-13T18:51:48.176257+00:00",
+  "llm_disabled": false,
+  "status": "failed",
+  "stage_status": {
+    "f1_status": "degraded",
+    "f2_status": "failed",
+    "failure_reason": "graph_error",
+    "is_structurally_valid": false
+  },
+  "quality_labels": {
+    "f1_label": null,
+    "f2_label": null,
+    "run_label": "invalid"
+  },
+  "metrics": {
+    "opportunity_count": 6,
+    "valid_opportunity_count": 6,
+    "package_count": 0,
+    "variant_count": 0,
+    "taboo_violations": 0,
+    "f1_status": "degraded",
+    "f2_status": "failed"
+  },
+  "case": {
+    "eval_brand_id": "eval_brand_revops_saas",
+    "brand_name": "RevOps Intelligence",
+    "opportunities": [
+      {
+        "id": "3f99a96c-d886-5618-b1e0-53bf1b87644c",
+        "title": "Industry trend: AI adoption in RevOps Intelligence's sector",
+        "angle": "Rising discussion about AI tools - opportunity to share our perspective on practical implementation.",
+        "type": "trend",
+        "primary_channel": "linkedin",
+        "score": 75.0,
+        "is_valid": true
+      },
+      {
+        "id": "ba6773ec-64d9-5171-8f60-7198f3f50702",
+        "title": "Weekly thought leadership post",
+        "angle": "Regular cadence content about our core expertise area.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 72.0,
+        "is_valid": true
+      },
+      {
+        "id": "019fe9d2-b035-5c03-8037-99d08dce59e0",
+        "title": "Customer success story",
+        "angle": "Recent customer achieved notable results - great case study material.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 70.0,
+        "is_valid": true
+      },
+      {
+        "id": "557868cf-2af0-5730-8c48-ebc9c947050f",
+        "title": "Competitor announcement response",
+        "angle": "Competitor just announced a feature - opportunity to differentiate our approach.",
+        "type": "competitive",
+        "primary_channel": "x",
+        "score": 68.0,
+        "is_valid": true
+      },
+      {
+        "id": "d0a601ac-8c06-50d9-9dd9-62c1748bceed",
+        "title": "Industry report commentary",
+        "angle": "New industry report released - can provide contrarian take aligned with our positioning.",
+        "type": "trend",
+        "primary_channel": "x",
+        "score": 65.0,
+        "is_valid": true
+      },
+      {
+        "id": "77092432-9129-58db-a2bf-de37e8bbcad0",
+        "title": "Behind the scenes: Product development",
+        "angle": "Authenticity content showing how we build - builds trust with audience.",
+        "type": "evergreen",
+        "primary_channel": "linkedin",
+        "score": 60.0,
+        "is_valid": true
+      }
+    ],
+    "packages": [],
+    "variants": [],
+    "warnings": [
+      "Error processing opportunity 3f99a96c-d886-5618-b1e0-53bf1b87644c: Graph failed: Output parsing failed: Schema validation failed: package.primary_channel: Field required. Raw text: ```json\n{\n  \"package\": {\n    \"title\": \"Practical AI Implementation in RevOps: Beyond the Hype\",\n    \"thesis\": \"AI tools can revolutionize RevOps by eliminating data silos and enhancing decision-making...",
+      "Error processing opportunity ba6773ec-64d9-5171-8f60-7198f3f50702: Graph failed: Output parsing failed: Schema validation failed: package.primary_channel: Field required. Raw text: ```json\n{\n  \"package\": {\n    \"title\": \"Eliminate Data Silos for Predictable Growth: A RevOps Approach\",\n    \"thesis\": \"Demonstrate how unifying RevOps automation can eliminate data silos, leading to m..."
+    ]
+  },
+  "errors": [
+    "Stage failure: graph_error"
+  ]
+}
