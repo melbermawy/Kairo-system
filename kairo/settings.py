@@ -53,6 +53,8 @@ INSTALLED_APPS = [
     "kairo.ingestion",
     # Integrations
     "kairo.integrations.apify.apps.ApifyConfig",
+    # PR-1: BrandBrain data model
+    "kairo.brandbrain.apps.BrandBrainConfig",
     # PRD-1: out of scope for PR-0 - future apps:
     # "kairo.engines.brand_brain",
     # "kairo.engines.opportunities",

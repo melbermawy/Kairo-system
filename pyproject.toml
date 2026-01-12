@@ -29,7 +29,8 @@ python_files = ["test_*.py", "*_test.py"]
 testpaths = ["tests"]
 addopts = "-v"
 markers = [
-    "unit: Fast unit tests (no external dependencies, minimal DB)",
+    "unit: Fast unit tests (NO Django DB, NO migrations, pure Python only)",
+    "db: Tests requiring Django DB access (runs migrations, uses pytest-django)",
     "contract: Contract tests verifying API shapes (may be skipped until endpoints exist)",
     "integration: Integration tests requiring external services or full stack",
 ]
