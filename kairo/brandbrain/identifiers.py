@@ -4,12 +4,18 @@ Identifier normalization for SourceConnection.
 PR-1: Normalize identifiers before save to ensure uniqueness constraint works correctly.
 
 Conservative approach: only normalize obvious duplicates, no heavy parsing.
+
+Platform-specific rules:
+- instagram/tiktok: strip leading '@' from handles
+- linkedin company_posts: if URL, extract slug; if slug, lowercase
+- web/youtube: only trim whitespace + strip trailing slash from URLs
+- ALL URLs: lowercase scheme+host only (preserve path case and query string)
 """
 
 from __future__ import annotations
 
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 
 def normalize_source_identifier(platform: str, capability: str, identifier: str) -> str:
@@ -24,12 +30,14 @@ def normalize_source_identifier(platform: str, capability: str, identifier: str)
     Returns:
         Normalized identifier string.
 
-    Normalization rules (conservative):
-    - Strip leading/trailing whitespace
-    - Strip trailing slashes from URLs
-    - Strip leading '@' from handles
-    - LinkedIn company URLs: extract slug after /company/
-    - Lowercase scheme and host for URLs
+    Normalization rules (conservative, platform-aware):
+    - Strip leading/trailing whitespace (all)
+    - URLs: lowercase scheme+host only, preserve path case and query string
+    - URLs: strip trailing slash from path only
+    - instagram/tiktok handles: strip leading '@'
+    - linkedin company_posts URLs: extract slug after /company/
+    - linkedin company_posts slugs: lowercase
+    - web/youtube: no handle rules, only URL normalization
     """
     if not identifier:
         return identifier
@@ -53,32 +61,45 @@ def normalize_source_identifier(platform: str, capability: str, identifier: str)
 
 
 def _normalize_url_identifier(platform: str, capability: str, identifier: str) -> str:
-    """Normalize URL-based identifiers."""
+    """
+    Normalize URL-based identifiers.
+
+    Rules:
+    - Lowercase scheme and host only (NOT path or query)
+    - Strip trailing slash from path
+    - Preserve query string and fragment
+    - LinkedIn company URLs: extract and lowercase slug
+    - No www stripping (too risky for general use)
+    """
     try:
         parsed = urlparse(identifier)
 
-        # Lowercase scheme and host
+        # Lowercase scheme and host only
         scheme = parsed.scheme.lower() if parsed.scheme else "https"
         host = parsed.netloc.lower() if parsed.netloc else ""
 
-        # Strip www. prefix for consistency
-        if host.startswith("www."):
-            host = host[4:]
-
-        # Get path and strip trailing slash
+        # Path: strip trailing slash, but preserve case
         path = parsed.path.rstrip("/")
 
-        # LinkedIn company: extract slug
+        # LinkedIn company: extract slug (special case)
         if platform == "linkedin" and capability == "company_posts":
-            match = re.search(r"/company/([^/?#]+)", path)
+            # For LinkedIn, we DO strip www and extract just the slug
+            match = re.search(r"/company/([^/?#]+)", path, re.IGNORECASE)
             if match:
                 return match.group(1).lower()
 
-        # Rebuild URL with normalized parts
-        normalized = f"{scheme}://{host}{path}"
+        # Rebuild URL preserving query and fragment
+        # urlunparse expects: (scheme, netloc, path, params, query, fragment)
+        normalized = urlunparse((
+            scheme,
+            host,
+            path,
+            parsed.params,
+            parsed.query,
+            parsed.fragment,
+        ))
 
-        # Strip trailing slash again (in case path was just "/")
-        return normalized.rstrip("/")
+        return normalized
 
     except Exception:
         # If parsing fails, just strip trailing slash
@@ -86,9 +107,16 @@ def _normalize_url_identifier(platform: str, capability: str, identifier: str) -
 
 
 def _normalize_handle_identifier(platform: str, capability: str, identifier: str) -> str:
-    """Normalize handle-based identifiers (non-URL)."""
-    # Strip leading '@' for social handles
-    if platform in ("instagram", "tiktok", "twitter") and identifier.startswith("@"):
+    """
+    Normalize handle-based identifiers (non-URL).
+
+    Rules:
+    - instagram/tiktok: strip leading '@'
+    - linkedin company_posts: lowercase slug
+    - web/youtube: no handle rules (shouldn't have handles anyway)
+    """
+    # Strip leading '@' for social handles only
+    if platform in ("instagram", "tiktok") and identifier.startswith("@"):
         identifier = identifier[1:]
 
     # LinkedIn company slug: lowercase

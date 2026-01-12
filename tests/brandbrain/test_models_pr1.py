@@ -112,9 +112,14 @@ class TestIndexesExist:
         assert "idx_nei_brand_recency" in indexes
 
     def test_nei_brand_published_index(self):
-        """Index for bundler recency + engagement sorting."""
+        """Index for bundler: (brand_id, platform, published_at) - Pattern C."""
         indexes = _get_indexes("brandbrain_normalized_evidence_item")
         assert "idx_nei_brand_published" in indexes
+
+    def test_nei_brand_published_ct_index(self):
+        """Index for bundler: (brand_id, platform, content_type, published_at) - Pattern B."""
+        indexes = _get_indexes("brandbrain_normalized_evidence_item")
+        assert "idx_nei_brand_published_ct" in indexes
 
     def test_source_connection_brand_enabled_index(self):
         """Index for enabled sources lookup."""

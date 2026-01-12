@@ -213,17 +213,32 @@ class NormalizedEvidenceItem(models.Model):
     class Meta:
         app_label = "brandbrain"
         db_table = "brandbrain_normalized_evidence_item"
+        # =============================================================================
+        # Expected Query Patterns (PR-4 Bundler will use these):
+        # =============================================================================
+        # Pattern A: Filter by (brand_id, platform, content_type), order by created_at
+        #   → idx_nei_brand_recency covers this
+        # Pattern B: Filter by (brand_id, platform, content_type), order by published_at
+        #   → idx_nei_brand_published_ct (RunSQL) covers this
+        # Pattern C: Filter by (brand_id, platform) only, order by published_at
+        #   → idx_nei_brand_published (RunSQL) covers this - used when selecting
+        #     across all content_types for a platform (e.g., "all Instagram content")
+        # Pattern D: Filter by (brand_id, platform) for platform-level stats
+        #   → idx_nei_brand_platform covers this
+        # =============================================================================
         indexes = [
-            # Required per spec 1.2: bundle selection by recency
+            # Pattern A: bundle selection by recency (created_at)
             models.Index(
                 fields=["brand", "platform", "content_type", "-created_at"],
                 name="idx_nei_brand_recency",
             ),
-            # Required per spec 1.2: recency + engagement sorting for bundling
+            # Pattern D: platform-level filtering/stats
             models.Index(
                 fields=["brand", "platform"],
                 name="idx_nei_brand_platform",
             ),
+            # Note: Pattern B and C indexes are created via RunSQL in migrations
+            # because Django ORM doesn't support DESC NULLS LAST natively.
         ]
         # Note: Partial unique constraints require RunSQL migration
         # Standard constraints added here for basic validation
