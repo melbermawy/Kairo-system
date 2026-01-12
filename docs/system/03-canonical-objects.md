@@ -66,7 +66,7 @@ root entity; everything else hangs off this.
 manual onboarding (ui / admin)
 
 **mutated by**  
-brand brain engine (for strategy metadata only), admin flows
+admin / brand settings flows only (no engines)
 
 **read by**  
 all engines, frontend everywhere
@@ -421,7 +421,13 @@ frontend board, content engineering, patterns, learning
 - MUST have `angle_summary` (short human-readable explanation).
 - MUST have `opportunity_type` in `{trend, evergreen, competitive, product, campaign}` (v1 can be fewer, but type is mandatory).
 - MUST have numeric `score` (0–100) representing internal “opportunity strength”.
-- MUST have `created_at`; MUST never change `created_at` (immutable; state changes are separate fields).
+- MUST have `lifecycle_state` in `{new, in_progress, used, snoozed, dismissed}`:
+  - `new`: generated but untouched,
+  - `in_progress`: has at least one ContentPackage,
+  - `used`: at least one package published from it,
+  - `snoozed`: temporarily hidden by user,
+  - `dismissed`: explicitly ignored.
+- MUST have `created_at`; MUST never change `created_at` (immutable).
 
 **example**
 

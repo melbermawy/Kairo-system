@@ -28,6 +28,15 @@ DJANGO_SETTINGS_MODULE = "kairo.settings"
 python_files = ["test_*.py", "*_test.py"]
 testpaths = ["tests"]
 addopts = "-v"
+markers = [
+    "unit: Fast unit tests (no external dependencies, minimal DB)",
+    "contract: Contract tests verifying API shapes (may be skipped until endpoints exist)",
+    "integration: Integration tests requiring external services or full stack",
+]
+# Filter third-party deprecation warnings we can't fix
+filterwarnings = [
+    "ignore::pytest.PytestRemovedIn9Warning:_hypothesis_pytestplugin",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["kairo"]

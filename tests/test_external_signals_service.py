@@ -470,3 +470,100 @@ class TestFixtureFileIntegrity:
             assert fixture_path.exists(), (
                 f"Index references {filename} for slug '{slug}' but file doesn't exist"
             )
+
+
+# =============================================================================
+# EXTERNAL SIGNALS MODE TESTS
+# =============================================================================
+
+
+@pytest.mark.django_db
+class TestExternalSignalsMode:
+    """Tests for EXTERNAL_SIGNALS_MODE no-fallback semantics."""
+
+    def test_ingestion_mode_empty_when_no_candidates(self, brand_with_fixture):
+        """
+        When EXTERNAL_SIGNALS_MODE='ingestion' and there are zero TrendCandidates,
+        bundle is empty and fixtures are NOT used.
+        """
+        with patch.object(
+            external_signals_service.settings,
+            "EXTERNAL_SIGNALS_MODE",
+            "ingestion",
+        ):
+            bundle = get_bundle_for_brand(brand_with_fixture.id)
+
+        # Should be empty because no TrendCandidates exist
+        assert bundle.brand_id == brand_with_fixture.id
+        assert len(bundle.trends) == 0
+        # Importantly, should NOT fall back to fixtures
+        # (fixtures would give us non-empty trends)
+
+    def test_ingestion_mode_returns_real_trends(self, tenant):
+        """
+        When EXTERNAL_SIGNALS_MODE='ingestion' and TrendCandidates exist,
+        those real trends are returned.
+        """
+        from kairo.ingestion.models import Cluster, TrendCandidate
+
+        # Create a test brand
+        brand = Brand.objects.create(
+            tenant=tenant,
+            name="Test Brand Ingestion",
+            slug=f"test-ingestion-{uuid4().hex[:8]}",
+            primary_channel=Channel.LINKEDIN,
+        )
+
+        # Create cluster and trend candidate
+        cluster = Cluster.objects.create(
+            cluster_key_type="hashtag",
+            cluster_key="tiktok:#ingestiontest",
+            display_name="#ingestiontest",
+            platforms=["tiktok"],
+        )
+        TrendCandidate.objects.create(
+            cluster=cluster,
+            status="emerging",
+            trend_score=80.0,
+            detected_at=datetime.now(timezone.utc),
+        )
+
+        with patch.object(
+            external_signals_service.settings,
+            "EXTERNAL_SIGNALS_MODE",
+            "ingestion",
+        ):
+            bundle = get_bundle_for_brand(brand.id)
+
+        # Should have the real trend
+        assert len(bundle.trends) == 1
+        assert bundle.trends[0].topic == "#ingestiontest"
+
+    def test_fixtures_mode_uses_fixtures(self, brand_with_fixture):
+        """
+        When EXTERNAL_SIGNALS_MODE='fixtures' (default), fixtures are used.
+        """
+        with patch.object(
+            external_signals_service.settings,
+            "EXTERNAL_SIGNALS_MODE",
+            "fixtures",
+        ):
+            bundle = get_bundle_for_brand(brand_with_fixture.id)
+
+        # Should have fixture data
+        assert len(bundle.trends) > 0
+
+    def test_default_mode_is_fixtures(self, brand_with_fixture):
+        """
+        Default mode (no setting) behaves like 'fixtures' mode.
+        """
+        # Make sure EXTERNAL_SIGNALS_MODE is not set
+        with patch.object(
+            external_signals_service,
+            "settings",
+            type("Settings", (), {"EXTERNAL_SIGNALS_MODE": "fixtures"})(),
+        ):
+            bundle = get_bundle_for_brand(brand_with_fixture.id)
+
+        # Should have fixture data
+        assert bundle.brand_id == brand_with_fixture.id

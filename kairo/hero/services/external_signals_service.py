@@ -1,10 +1,12 @@
 """
 External Signals Service.
 
-PR-5: External Signals Bundler (Stubbed, No HTTP).
+PR-5: External Signals Bundler.
 
-This service provides external signal bundles for brands using local fixtures only.
-No HTTP calls, no LLM calls, no deepagents - just local JSON files.
+This service provides external signal bundles for brands.
+Mode controlled by EXTERNAL_SIGNALS_MODE setting:
+- "fixtures": Use local JSON fixtures (original behavior, default)
+- "ingestion": Use real ingested TrendCandidates only (NO FALLBACK)
 
 Per PRD-1 §6.2 and PR-map-and-standards §PR-5:
 - Returns ExternalSignalBundleDTO for a given brand_id
@@ -12,8 +14,8 @@ Per PRD-1 §6.2 and PR-map-and-standards §PR-5:
 - Empty bundles for unknown brands (graceful degradation)
 - Malformed fixtures log warnings and return empty bundles
 
-IMPORTANT: This module must NOT import requests, httpx, aiohttp, urllib.request,
-or any other HTTP library. All external data comes from local fixtures.
+IMPORTANT: In "ingestion" mode, NEVER fall back to fixtures.
+Empty TrendCandidates = empty bundle (not fixtures).
 """
 
 import json
@@ -21,6 +23,8 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
+
+from django.conf import settings
 
 from kairo.core.models import Brand
 from kairo.hero.dto import (
@@ -41,7 +45,32 @@ def get_bundle_for_brand(brand_id: UUID) -> ExternalSignalBundleDTO:
     """
     Get external signals bundle for a brand.
 
-    PR-5 implementation (stubbed, fixture-based):
+    Mode-aware implementation:
+    - "fixtures": Uses local JSON fixtures (original behavior)
+    - "ingestion": Uses real ingested TrendCandidates only (NO FALLBACK)
+
+    Args:
+        brand_id: UUID of the brand
+
+    Returns:
+        ExternalSignalBundleDTO with signals data (or empty if not available)
+    """
+    mode = getattr(settings, "EXTERNAL_SIGNALS_MODE", "fixtures")
+
+    if mode == "ingestion":
+        # Use ingestion pipeline - NO FALLBACK to fixtures
+        from kairo.ingestion.services.trend_emitter import get_external_signal_bundle
+        return get_external_signal_bundle(str(brand_id))
+
+    # mode == "fixtures": use fixture loader (original behavior)
+    return _get_bundle_from_fixtures(brand_id)
+
+
+def _get_bundle_from_fixtures(brand_id: UUID) -> ExternalSignalBundleDTO:
+    """
+    Get external signals bundle from fixtures.
+
+    Original fixture-based implementation:
     - Looks up brand by ID to get its slug
     - Loads fixture data from local JSON file based on slug
     - Returns empty bundle if brand not found or no fixture exists
