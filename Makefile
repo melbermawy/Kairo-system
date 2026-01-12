@@ -2,7 +2,7 @@
 #
 # Common development tasks for the Kairo project.
 
-.PHONY: help install test test-unit test-brandbrain test-contract test-ci lint clean
+.PHONY: help install test test-unit test-db test-brandbrain test-contract test-ci lint clean
 
 # Default target
 help:
@@ -13,10 +13,11 @@ help:
 	@echo ""
 	@echo "Testing:"
 	@echo "  make test           Run full test suite (all markers)"
-	@echo "  make test-unit      Run fast unit tests only (<30s target)"
+	@echo "  make test-unit      Run fast unit tests only (<=5s, no DB)"
+	@echo "  make test-db        Run DB tests (requires migrations)"
 	@echo "  make test-brandbrain Run BrandBrain unit tests"
 	@echo "  make test-contract  Run contract tests (currently skipped)"
-	@echo "  make test-ci        CI command: unit tests, quiet output"
+	@echo "  make test-ci        CI PR gate: unit tests only (<=5s)"
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make lint           Run linters (if configured)"
@@ -35,22 +36,28 @@ install:
 # TESTING
 #
 # Markers:
-#   unit      - Fast unit tests (no external deps, minimal DB)
+#   unit      - Fast unit tests (NO Django DB, NO migrations, pure Python)
+#   db        - Tests requiring Django DB (runs migrations, slower)
 #   contract  - Contract tests (may be skipped until endpoints exist)
 #   integration - Integration tests (external services, full stack)
 #
-# CI runs test-unit by default for fast feedback.
-# Full suite (make test) runs everything including contract tests.
+# CI runs test-unit by default for fast feedback (<=5s).
+# DB tests run separately and are slower due to migrations.
 # =============================================================================
 
 # Run full test suite (all tests, including skipped contract tests)
 test:
 	pytest tests/ -v
 
-# Run fast unit tests only - CI default, target <30s
-# Uses -m "unit" to select only tests marked @pytest.mark.unit
+# Run fast unit tests only - CI default, target <=5s
+# NO Django DB, NO migrations, pure Python only
 test-unit:
 	pytest tests/ -m "unit" -q
+
+# Run DB tests (requires Django, runs migrations)
+# Use --reuse-db for faster subsequent runs
+test-db:
+	pytest tests/ -m "db" -q --reuse-db
 
 # Run BrandBrain unit tests specifically (subset of test-unit)
 test-brandbrain:
@@ -60,11 +67,10 @@ test-brandbrain:
 test-contract:
 	pytest tests/ -m "contract" -v
 
-# CI command: fast unit tests with minimal output
-# This is what PR checks should run
-# Uses --reuse-db to skip migrations on subsequent runs
+# CI command: fast unit tests only (PR gate)
+# Must complete in <=5s, no DB access
 test-ci:
-	pytest tests/ -m "unit" -q --tb=short --reuse-db
+	pytest tests/ -m "unit" -q --tb=short
 
 # =============================================================================
 # CODE QUALITY

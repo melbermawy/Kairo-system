@@ -9,7 +9,9 @@ These tests prove:
 3. Sample loader can access var/apify_samples/
 4. Dict builders produce valid structures
 
-All tests here are marked @pytest.mark.unit for fast CI runs.
+Marker strategy:
+- @pytest.mark.unit = Fast tests, NO Django DB, NO migrations (target <5s)
+- @pytest.mark.db = Tests requiring Django DB (runs migrations, slower)
 """
 
 import pytest
@@ -18,11 +20,11 @@ from tests.helpers.apify_samples import list_sample_dirs, load_sample
 
 
 # =============================================================================
-# DJANGO DB WIRING
+# DJANGO DB WIRING (requires DB - NOT in unit suite)
 # =============================================================================
 
 
-@pytest.mark.unit
+@pytest.mark.db
 @pytest.mark.django_db
 class TestDjangoDbWiring:
     """Smoke tests proving Django test DB is wired correctly."""
