@@ -19,6 +19,22 @@ import uuid
 from django.db import models
 
 
+class ApifyRunStatus:
+    """
+    Status constants for ApifyRun.
+
+    Centralizes status values to reduce typos and ensure alignment with
+    partial index idx_apifyrun_source_success (WHERE status = 'succeeded').
+    """
+
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    TIMED_OUT = "timed_out"
+    ABORTED = "aborted"
+
+
 class ApifyRun(models.Model):
     """
     Metadata for a single Apify actor run.
@@ -34,12 +50,12 @@ class ApifyRun(models.Model):
     """
 
     STATUS_CHOICES = [
-        ("pending", "Pending"),
-        ("running", "Running"),
-        ("succeeded", "Succeeded"),
-        ("failed", "Failed"),
-        ("timed_out", "Timed Out"),
-        ("aborted", "Aborted"),
+        (ApifyRunStatus.PENDING, "Pending"),
+        (ApifyRunStatus.RUNNING, "Running"),
+        (ApifyRunStatus.SUCCEEDED, "Succeeded"),
+        (ApifyRunStatus.FAILED, "Failed"),
+        (ApifyRunStatus.TIMED_OUT, "Timed Out"),
+        (ApifyRunStatus.ABORTED, "Aborted"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
