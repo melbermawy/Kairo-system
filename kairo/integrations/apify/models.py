@@ -8,6 +8,8 @@ Models:
 - RawApifyItem: Raw JSON item from a dataset (immutable)
 
 Design principle: Store raw first. Normalization is a second pass.
+
+PR-1: Extended ApifyRun with BrandBrain integration fields per spec v2.4 Section 2.2.
 """
 
 from __future__ import annotations
@@ -23,6 +25,12 @@ class ApifyRun(models.Model):
 
     Tracks the run lifecycle from start to completion,
     including any errors encountered.
+
+    PR-1: Extended with BrandBrain integration fields:
+    - source_connection_id: links run to a SourceConnection (nullable)
+    - brand_id: optional denorm for faster queries (nullable)
+    - raw_item_count: count of RawApifyItem rows created
+    - normalized_item_count: count of NormalizedEvidenceItem rows created
     """
 
     STATUS_CHOICES = [
@@ -47,12 +55,24 @@ class ApifyRun(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # PR-1: BrandBrain integration fields (all nullable for backwards compat)
+    # Note: FK to SourceConnection uses string reference to avoid circular import
+    source_connection_id = models.UUIDField(null=True, blank=True, db_index=True)
+    brand_id = models.UUIDField(null=True, blank=True, db_index=True)
+    raw_item_count = models.PositiveIntegerField(default=0)
+    normalized_item_count = models.PositiveIntegerField(default=0)
+
     class Meta:
         app_label = "apify"
         db_table = "apify_run"
         indexes = [
             models.Index(fields=["actor_id", "-created_at"]),
             models.Index(fields=["status", "-created_at"]),
+            # PR-1: Required per spec 1.2 - all runs for brand
+            models.Index(
+                fields=["brand_id", "status"],
+                name="idx_apifyrun_brand_status",
+            ),
         ]
 
     def __str__(self) -> str:
