@@ -2,6 +2,7 @@
 BrandBrain data models.
 
 PR-1: Data Model + Migrations + Indexes.
+PR-6: BrandBrainJob for durable job queue.
 
 Models per spec v2.4 Section 2:
 - BrandOnboarding (1:1 with Brand)
@@ -12,6 +13,7 @@ Models per spec v2.4 Section 2:
 - BrandBrainCompileRun (compile job tracking)
 - BrandBrainOverrides (user overrides/pins, 1:1 with Brand)
 - BrandBrainSnapshot (final compiled output)
+- BrandBrainJob (PR-6: durable job queue)
 
 Note: ApifyRun extension is in kairo/integrations/apify/models.py
 """
@@ -454,3 +456,111 @@ class BrandBrainSnapshot(models.Model):
 
     def __str__(self) -> str:
         return f"Snapshot for {self.brand.name} @ {self.created_at}"
+
+
+# =============================================================================
+# JOB QUEUE (PR-6)
+# =============================================================================
+
+
+class BrandBrainJobStatus:
+    """
+    Status constants for BrandBrainJob.
+
+    Job lifecycle: PENDING -> RUNNING -> SUCCEEDED/FAILED
+    """
+
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class BrandBrainJob(models.Model):
+    """
+    Durable job queue for BrandBrain compile jobs.
+
+    PR-6: DB-backed job queue for production durability.
+    Replaces ThreadPoolExecutor for surviving restarts.
+
+    Job leasing:
+    - Worker claims job by setting status=RUNNING, locked_at, locked_by
+    - Atomic update ensures no double-claiming
+    - Stale lock detection via locked_at threshold
+
+    Retry policy:
+    - max_attempts default 3
+    - available_at for exponential backoff
+    - last_error for debugging
+    """
+
+    JOB_TYPE_CHOICES = [
+        ("compile", "Compile BrandBrain"),
+    ]
+
+    STATUS_CHOICES = [
+        (BrandBrainJobStatus.PENDING, "Pending"),
+        (BrandBrainJobStatus.RUNNING, "Running"),
+        (BrandBrainJobStatus.SUCCEEDED, "Succeeded"),
+        (BrandBrainJobStatus.FAILED, "Failed"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    brand = models.ForeignKey(
+        Brand,
+        on_delete=models.CASCADE,
+        related_name="brandbrain_jobs",
+    )
+    compile_run = models.ForeignKey(
+        BrandBrainCompileRun,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="jobs",
+    )
+    job_type = models.CharField(max_length=50, choices=JOB_TYPE_CHOICES, default="compile")
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=BrandBrainJobStatus.PENDING,
+        db_index=True,
+    )
+
+    # Retry tracking
+    attempts = models.PositiveIntegerField(default=0)
+    max_attempts = models.PositiveIntegerField(default=3)
+    last_error = models.TextField(null=True, blank=True)
+
+    # Job leasing
+    locked_at = models.DateTimeField(null=True, blank=True)
+    locked_by = models.CharField(max_length=255, null=True, blank=True)  # worker identifier
+
+    # Scheduling
+    available_at = models.DateTimeField(auto_now_add=True)  # for backoff scheduling
+
+    # Job parameters
+    params_json = models.JSONField(default=dict)  # force_refresh, prompt_version, model
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        app_label = "brandbrain"
+        db_table = "brandbrain_job"
+        indexes = [
+            # Worker query: find next available job
+            models.Index(
+                fields=["status", "available_at"],
+                name="idx_job_status_available",
+            ),
+            # Brand job history
+            models.Index(
+                fields=["brand", "-created_at"],
+                name="idx_job_brand_created",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Job {self.id} ({self.job_type}) for {self.brand_id} [{self.status}]"
