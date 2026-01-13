@@ -1,66 +1,89 @@
+# Backend-Frontend Route Contract
+
+Verbatim code for BrandBrain API routes.
+
+---
+
+## 1. kairo/urls.py (BrandBrain-related urlpattern)
+
+```python
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("", include("kairo.hero.urls")),
+    # PR-5: BrandBrain API endpoints
+    path(
+        "api/brands/<str:brand_id>/brandbrain/",
+        include("kairo.brandbrain.api.urls", namespace="brandbrain"),
+    ),
+]
+```
+
+---
+
+## 2. kairo/brandbrain/api/urls.py (entire file)
+
+```python
 """
-BrandBrain API Views.
+BrandBrain API URL routing.
 
-PR-5: Compile Orchestration Skeleton.
-PR-7: API Surface + Contract Tests + Performance Guards.
+PR-5: Compile Orchestration endpoints.
+PR-7: API Surface + Overrides endpoints.
 
-Implements:
-- POST /api/brands/:id/brandbrain/compile - kickoff (work-path)
-- GET /api/brands/:id/brandbrain/compile/:compile_run_id/status - status poll (read-path)
-- GET /api/brands/:id/brandbrain/latest - latest snapshot (read-path)
-- GET /api/brands/:id/brandbrain/history - snapshot history (read-path)
-- GET /api/brands/:id/brandbrain/overrides - get user overrides (read-path)
-- PATCH /api/brands/:id/brandbrain/overrides - update user overrides (work-path)
-
-Per spec Section 1.1 Performance Contracts:
-- POST /compile: <200ms (kickoff only, async work)
-- GET /status: <30ms (pure DB read)
-- GET /latest: <50ms (2 queries with select_related)
-- GET /history: <100ms (3 queries paginated)
-- GET /overrides: <30ms (2 queries)
-- PATCH /overrides: <100ms (work-path)
-
-Read-path endpoints are DB reads only. No side effects.
+URL patterns follow spec Section 10:
+- POST /api/brands/:id/brandbrain/compile
+- GET /api/brands/:id/brandbrain/compile/:compile_run_id/status
+- GET /api/brands/:id/brandbrain/latest
+- GET /api/brands/:id/brandbrain/history
+- GET/PATCH /api/brands/:id/brandbrain/overrides
 """
 
-from __future__ import annotations
+from django.urls import path
 
-import json
-import logging
-from uuid import UUID
+from kairo.brandbrain.api import views
 
-from django.http import JsonResponse
-from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_exempt
+app_name = "brandbrain"
 
-from kairo.brandbrain.compile import (
-    compile_brandbrain,
-    get_compile_status,
-    check_compile_gating,
-)
+urlpatterns = [
+    # Work-path: compile kickoff
+    path(
+        "compile",
+        views.compile_kickoff,
+        name="compile-kickoff",
+    ),
+    # Read-path: compile status
+    path(
+        "compile/<str:compile_run_id>/status",
+        views.compile_status,
+        name="compile-status",
+    ),
+    # Read-path: latest snapshot
+    path(
+        "latest",
+        views.latest_snapshot,
+        name="latest-snapshot",
+    ),
+    # Read-path: snapshot history
+    path(
+        "history",
+        views.snapshot_history,
+        name="snapshot-history",
+    ),
+    # Overrides: GET (read-path) + PATCH (work-path)
+    path(
+        "overrides",
+        views.overrides_view,
+        name="overrides",
+    ),
+]
+```
 
-logger = logging.getLogger(__name__)
+---
 
+## 3. kairo/brandbrain/api/views.py
 
-def _parse_uuid(value: str) -> UUID | None:
-    """Parse a string to UUID, returning None on failure."""
-    try:
-        return UUID(value)
-    except (ValueError, TypeError):
-        return None
+### 3.1 compile_kickoff (POST /compile)
 
-
-def _brand_exists(brand_id: UUID) -> bool:
-    """Check if brand exists."""
-    from kairo.core.models import Brand
-    return Brand.objects.filter(id=brand_id).exists()
-
-
-# =============================================================================
-# COMPILE ENDPOINTS (Work-path + Status read-path)
-# =============================================================================
-
-
+```python
 @csrf_exempt
 @require_http_methods(["POST"])
 def compile_kickoff(request, brand_id: str) -> JsonResponse:
@@ -157,8 +180,11 @@ def compile_kickoff(request, brand_id: str) -> JsonResponse:
         "status": result.status,
         "poll_url": result.poll_url,
     }, status=202)
+```
 
+### 3.2 compile_status (GET /compile/:compile_run_id/status)
 
+```python
 @require_http_methods(["GET"])
 def compile_status(request, brand_id: str, compile_run_id: str) -> JsonResponse:
     """
@@ -219,13 +245,11 @@ def compile_status(request, brand_id: str, compile_run_id: str) -> JsonResponse:
         return JsonResponse({"error": "Compile run not found"}, status=404)
 
     return JsonResponse(status.to_dict(), status=200)
+```
 
+### 3.3 latest_snapshot (GET /latest)
 
-# =============================================================================
-# READ ENDPOINTS (Read-path only)
-# =============================================================================
-
-
+```python
 @require_http_methods(["GET"])
 def latest_snapshot(request, brand_id: str) -> JsonResponse:
     """
@@ -314,8 +338,11 @@ def latest_snapshot(request, brand_id: str) -> JsonResponse:
             response_data["bundle_summary"] = snapshot.compile_run.bundle.summary_json
 
     return JsonResponse(response_data, status=200)
+```
 
+### 3.4 snapshot_history (GET /history)
 
+```python
 @require_http_methods(["GET"])
 def snapshot_history(request, brand_id: str) -> JsonResponse:
     """
@@ -390,34 +417,11 @@ def snapshot_history(request, brand_id: str) -> JsonResponse:
         "page_size": page_size,
         "total": total,
     }, status=200)
+```
 
+### 3.5 overrides_view (GET/PATCH /overrides)
 
-def _extract_diff_summary(diff_json: dict) -> dict:
-    """
-    Extract a compact summary from diff_from_previous_json.
-
-    PR-5: Returns minimal info since diff not computed yet.
-    """
-    if not diff_json:
-        return {}
-
-    # For PR-5 stubs, just return what we have
-    if diff_json.get("_note"):
-        return {"note": diff_json["_note"]}
-
-    # Future: Extract changed field paths, counts, etc.
-    return {
-        "fields_changed": len(diff_json.get("changed", [])),
-        "fields_added": len(diff_json.get("added", [])),
-        "fields_removed": len(diff_json.get("removed", [])),
-    }
-
-
-# =============================================================================
-# OVERRIDES ENDPOINTS (Read-path GET + Work-path PATCH)
-# =============================================================================
-
-
+```python
 @csrf_exempt
 @require_http_methods(["GET", "PATCH"])
 def overrides_view(request, brand_id: str) -> JsonResponse:
@@ -592,3 +596,34 @@ def _patch_overrides(request, brand_id: str) -> JsonResponse:
         "pinned_paths": overrides.pinned_paths,
         "updated_at": overrides.updated_at.isoformat() if overrides.updated_at else None,
     }, status=200)
+```
+
+---
+
+## 4. Example curl Commands
+
+### 4.1 Trigger Compile
+
+```bash
+curl -X POST http://localhost:8000/api/brands/12345678-1234-5678-1234-567812345678/brandbrain/compile \
+  -H "Content-Type: application/json" \
+  -d '{"force_refresh": false}'
+```
+
+### 4.2 Poll Status
+
+```bash
+curl http://localhost:8000/api/brands/12345678-1234-5678-1234-567812345678/brandbrain/compile/abcd1234-abcd-1234-abcd-1234abcd5678/status
+```
+
+### 4.3 Get Latest (compact)
+
+```bash
+curl http://localhost:8000/api/brands/12345678-1234-5678-1234-567812345678/brandbrain/latest
+```
+
+### 4.4 Get Latest (with include=full)
+
+```bash
+curl "http://localhost:8000/api/brands/12345678-1234-5678-1234-567812345678/brandbrain/latest?include=full"
+```
