@@ -2,7 +2,8 @@
 Contract tests for BrandBrain read-path endpoints.
 
 PR-0: Skeleton tests that define expected behavior.
-PR-7: Will be implemented with actual endpoint handlers.
+PR-5: Compile orchestration endpoints implemented.
+PR-7: API Surface completed - all read endpoints implemented.
 
 These tests verify:
 1. Response status codes
@@ -19,11 +20,10 @@ Per spec Section 10 (APIs):
 - GET /api/brands/:id/brandbrain/latest -> LatestSnapshotResponse
 - GET /api/brands/:id/brandbrain/history -> HistoryResponse (paginated)
 - GET /api/brands/:id/brandbrain/compile/:compile_run_id/status -> CompileStatusResponse
-- PATCH /api/brands/:id/brandbrain/overrides -> work-path, not tested here
+- GET/PATCH /api/brands/:id/brandbrain/overrides -> overrides CRUD
 
-Marker: @pytest.mark.contract - these are contract tests, skipped until PR-7.
-TODO PR-7: Remove skip markers and convert to xfail(strict=True) once endpoints
-exist but shapes need verification, then remove xfail when tests pass.
+Note: Full implementation tests are in test_pr7_api_surface.py.
+These contract tests focus on response shape validation.
 """
 
 import pytest

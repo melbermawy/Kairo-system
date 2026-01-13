@@ -2,12 +2,14 @@
 BrandBrain API URL routing.
 
 PR-5: Compile Orchestration endpoints.
+PR-7: API Surface + Overrides endpoints.
 
 URL patterns follow spec Section 10:
 - POST /api/brands/:id/brandbrain/compile
 - GET /api/brands/:id/brandbrain/compile/:compile_run_id/status
 - GET /api/brands/:id/brandbrain/latest
 - GET /api/brands/:id/brandbrain/history
+- GET/PATCH /api/brands/:id/brandbrain/overrides
 """
 
 from django.urls import path
@@ -40,5 +42,11 @@ urlpatterns = [
         "history",
         views.snapshot_history,
         name="snapshot-history",
+    ),
+    # Overrides: GET (read-path) + PATCH (work-path)
+    path(
+        "overrides",
+        views.overrides_view,
+        name="overrides",
     ),
 ]
