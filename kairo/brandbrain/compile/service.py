@@ -2,6 +2,7 @@
 BrandBrain Compile Orchestration Service.
 
 PR-5: Compile lifecycle management with stub LLM output.
+PR-6: Durable job queue + real ingestion wiring.
 
 Per spec Section 7.1, compile orchestration handles:
 - Step 0: Validate gating requirements (Tier0 required fields + ≥1 enabled source)
@@ -9,21 +10,24 @@ Per spec Section 7.1, compile orchestration handles:
 - Step 3: Normalize (idempotent)
 - Step 4: Bundle
 - Step 5: FeatureReport
-- Step 6-11: LLM compile + QA + merge (STUB for PR-5)
+- Step 6-11: LLM compile + QA + merge (STUB for PR-6)
 
-Async Mechanism (PR-5 Decision):
-No existing job framework (Celery/Django-Q/RQ) in codebase.
-Using ThreadPoolExecutor for minimal async - documented tradeoff:
-- Pros: No new dependencies, works in any deployment
-- Cons: No persistence across restarts, limited scalability
-- Future: Migrate to proper job queue when added (PR-6+)
+Async Mechanism (PR-6):
+Durable job queue with DB-backed persistence.
+- POST /compile enqueues job and returns immediately
+- Worker process claims and executes jobs
+- Jobs survive restarts
+- Retry with exponential backoff
+
+Sync Mode (for tests):
+- sync=True bypasses job queue and runs inline
+- Required for SQLite in-memory tests (no thread sharing)
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -40,11 +44,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
-
-# Thread pool for async compile work
-# Max workers = 4 to limit concurrent compiles
-# This is a minimal async mechanism for PR-5
-_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="brandbrain_compile_")
 
 
 # =============================================================================
@@ -260,6 +259,9 @@ def compile_brandbrain(
 
     Short-circuit: If inputs unchanged, returns existing snapshot immediately.
 
+    PR-6: Production uses durable job queue (enqueues job, worker executes).
+    Tests use sync=True for inline execution (SQLite in-memory).
+
     Args:
         brand_id: UUID of the brand to compile
         force_refresh: If True, skip short-circuit check
@@ -325,10 +327,12 @@ def compile_brandbrain(
         brand_id,
     )
 
-    # Execute work (sync for tests, async for production)
+    # Execute work
     if sync:
         # Synchronous execution for tests (SQLite in-memory doesn't share between threads)
-        _run_compile_worker(compile_run.id, force_refresh)
+        # Uses the new worker module with real ingestion
+        from kairo.brandbrain.compile.worker import execute_compile_job
+        execute_compile_job(compile_run.id, force_refresh)
         compile_run.refresh_from_db()
         return CompileResult(
             compile_run_id=compile_run.id,
@@ -336,8 +340,16 @@ def compile_brandbrain(
             poll_url=f"/api/brands/{brand_id}/brandbrain/compile/{compile_run.id}/status",
         )
     else:
-        # Async execution for production
-        _executor.submit(_run_compile_worker, compile_run.id, force_refresh)
+        # Production: Enqueue job to durable job queue
+        # Worker process will claim and execute
+        from kairo.brandbrain.jobs import enqueue_compile_job
+        enqueue_compile_job(
+            brand_id=brand_id,
+            compile_run_id=compile_run.id,
+            force_refresh=force_refresh,
+            prompt_version=prompt_version,
+            model=model,
+        )
         return CompileResult(
             compile_run_id=compile_run.id,
             status="PENDING",
@@ -345,251 +357,22 @@ def compile_brandbrain(
         )
 
 
+# =============================================================================
+# LEGACY WORKER (PR-5 compatibility - deprecated)
+# =============================================================================
+# These functions are kept for backward compatibility but are deprecated.
+# PR-6 moved worker logic to kairo.brandbrain.compile.worker module.
+
+
 def _run_compile_worker(compile_run_id: UUID, force_refresh: bool = False) -> None:
     """
-    Background worker that executes the compile pipeline.
+    DEPRECATED: Use kairo.brandbrain.compile.worker.execute_compile_job instead.
 
-    Per spec Section 7.1 steps 1-11:
-    - Steps 1-5: Load, freshen, normalize, bundle, feature report
-    - Steps 6-11: LLM compile (STUB), QA, merge, diff, snapshot
-
-    PR-5 stubs the LLM compile (step 7) with placeholder output.
+    This is kept for backward compatibility. PR-6 moved worker logic to
+    the worker module with real ingestion support.
     """
-    import django
-    django.setup()  # Ensure Django is ready in worker thread
-
-    from django.db import connection
-    from kairo.brandbrain.models import (
-        BrandBrainCompileRun,
-        BrandBrainSnapshot,
-        BrandOnboarding,
-        SourceConnection,
-    )
-    from kairo.brandbrain.bundling import create_evidence_bundle, create_feature_report
-    from kairo.brandbrain.actors.registry import is_capability_enabled
-
-    # Close any stale connections in this thread
-    connection.close()
-
-    try:
-        compile_run = BrandBrainCompileRun.objects.get(id=compile_run_id)
-    except BrandBrainCompileRun.DoesNotExist:
-        logger.error("Compile run %s not found", compile_run_id)
-        return
-
-    brand_id = compile_run.brand_id
-
-    try:
-        # Update status to RUNNING
-        compile_run.status = "RUNNING"
-        compile_run.save(update_fields=["status"])
-
-        # Initialize evidence status tracking
-        evidence_status = {
-            "reused": [],
-            "refreshed": [],
-            "skipped": [],
-            "failed": [],
-        }
-
-        # Step 1: Load onboarding
-        try:
-            onboarding = BrandOnboarding.objects.get(brand_id=brand_id)
-            answers = onboarding.answers_json or {}
-        except BrandOnboarding.DoesNotExist:
-            answers = {}
-
-        # Update onboarding snapshot
-        compile_run.onboarding_snapshot_json["answers"] = answers
-        compile_run.save(update_fields=["onboarding_snapshot_json"])
-
-        # Step 2: Check source freshness and populate evidence_status
-        sources = SourceConnection.objects.filter(
-            brand_id=brand_id,
-            is_enabled=True,
-        )
-
-        for source in sources:
-            source_key = f"{source.platform}.{source.capability}"
-
-            # Check if capability is enabled (feature flag for linkedin.profile_posts)
-            if not is_capability_enabled(source.platform, source.capability):
-                evidence_status["skipped"].append({
-                    "source": source_key,
-                    "reason": "Capability disabled (feature flag)",
-                })
-                continue
-
-            # Check freshness
-            freshness = check_source_freshness(source.id, force_refresh=force_refresh)
-
-            if freshness.should_refresh:
-                # PR-5: Mark as "would refresh" but don't actually trigger ingestion
-                # Actual ingestion integration is PR-6+
-                evidence_status["refreshed"].append({
-                    "source": source_key,
-                    "reason": freshness.reason,
-                    "note": "PR-5 stub - ingestion not triggered",
-                })
-            else:
-                evidence_status["reused"].append({
-                    "source": source_key,
-                    "reason": freshness.reason,
-                    "run_age_hours": freshness.run_age_hours,
-                })
-
-        compile_run.evidence_status_json = evidence_status
-        compile_run.save(update_fields=["evidence_status_json"])
-
-        # Step 3: Normalize (idempotent)
-        # PR-5: Skip actual normalization, rely on existing data
-
-        # Step 4: Create EvidenceBundle
-        try:
-            bundle = create_evidence_bundle(brand_id)
-            compile_run.bundle = bundle
-            compile_run.save(update_fields=["bundle"])
-            logger.info(
-                "Created bundle %s with %d items for compile run %s",
-                bundle.id,
-                len(bundle.item_ids),
-                compile_run_id,
-            )
-        except Exception as e:
-            logger.warning(
-                "Bundle creation failed for compile run %s: %s",
-                compile_run_id,
-                str(e),
-            )
-            bundle = None
-
-        # Step 5: Create FeatureReport
-        feature_report = None
-        if bundle:
-            try:
-                feature_report = create_feature_report(bundle)
-                logger.info(
-                    "Created feature report %s for compile run %s",
-                    feature_report.id,
-                    compile_run_id,
-                )
-            except Exception as e:
-                logger.warning(
-                    "Feature report creation failed for compile run %s: %s",
-                    compile_run_id,
-                    str(e),
-                )
-
-        # Steps 6-7: LLM compile (STUB for PR-5)
-        # Per spec, we stub with placeholder draft_json
-        stub_draft = _create_stub_draft(answers, bundle, feature_report)
-        compile_run.draft_json = stub_draft
-
-        # Step 8: QA checks (STUB for PR-5)
-        compile_run.qa_report_json = {
-            "status": "STUB",
-            "note": "PR-5 stub - QA not implemented",
-            "checks": [],
-        }
-
-        # Steps 9-11: Merge overrides, compute diff, create snapshot
-        # PR-5: Create minimal snapshot
-        snapshot = _create_stub_snapshot(compile_run, stub_draft)
-
-        # Mark as SUCCEEDED
-        compile_run.status = "SUCCEEDED"
-        compile_run.save(update_fields=["status", "draft_json", "qa_report_json"])
-
-        logger.info(
-            "Compile run %s succeeded with snapshot %s",
-            compile_run_id,
-            snapshot.id,
-        )
-
-    except Exception as e:
-        logger.exception("Compile run %s failed", compile_run_id)
-        compile_run.status = "FAILED"
-        compile_run.error = str(e)
-        compile_run.save(update_fields=["status", "error"])
-
-
-def _create_stub_draft(
-    answers: dict,
-    bundle: Any | None,
-    feature_report: Any | None,
-) -> dict:
-    """
-    Create a stub draft_json for PR-5.
-
-    This is NOT a real LLM compile. It's a placeholder that proves
-    the pipeline works end-to-end.
-    """
-    return {
-        "_stub": True,
-        "_note": "PR-5 stub - LLM compile not implemented",
-        "positioning": {
-            "what_we_do": {
-                "value": answers.get("tier0.what_we_do", ""),
-                "confidence": 0.9 if answers.get("tier0.what_we_do") else 0.0,
-                "sources": [{"type": "answer", "id": "tier0.what_we_do"}],
-                "locked": False,
-                "override_value": None,
-            },
-            "who_for": {
-                "value": answers.get("tier0.who_for", ""),
-                "confidence": 0.9 if answers.get("tier0.who_for") else 0.0,
-                "sources": [{"type": "answer", "id": "tier0.who_for"}],
-                "locked": False,
-                "override_value": None,
-            },
-        },
-        "voice": {
-            "cta_policy": {
-                "value": answers.get("tier0.cta_posture", "soft"),
-                "confidence": 0.9 if answers.get("tier0.cta_posture") else 0.0,
-                "sources": [{"type": "answer", "id": "tier0.cta_posture"}],
-                "locked": False,
-                "override_value": None,
-            },
-        },
-        "meta": {
-            "content_goal": {
-                "value": answers.get("tier0.primary_goal", ""),
-                "confidence": 0.9 if answers.get("tier0.primary_goal") else 0.0,
-                "sources": [{"type": "answer", "id": "tier0.primary_goal"}],
-                "locked": False,
-                "override_value": None,
-            },
-            "evidence_summary": {
-                "bundle_id": str(bundle.id) if bundle else None,
-                "item_count": len(bundle.item_ids) if bundle else 0,
-            },
-            "feature_report_id": str(feature_report.id) if feature_report else None,
-        },
-    }
-
-
-def _create_stub_snapshot(
-    compile_run: "BrandBrainCompileRun",
-    draft_json: dict,
-) -> "BrandBrainSnapshot":
-    """
-    Create a BrandBrainSnapshot from the compile run.
-
-    PR-5: Minimal snapshot with stub draft.
-    """
-    from kairo.brandbrain.models import BrandBrainSnapshot
-
-    snapshot = BrandBrainSnapshot.objects.create(
-        brand_id=compile_run.brand_id,
-        compile_run=compile_run,
-        snapshot_json=draft_json,
-        diff_from_previous_json={
-            "_note": "PR-5 stub - diff not computed",
-        },
-    )
-
-    return snapshot
+    from kairo.brandbrain.compile.worker import execute_compile_job
+    execute_compile_job(compile_run_id, force_refresh)
 
 
 # =============================================================================

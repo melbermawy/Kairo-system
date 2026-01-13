@@ -1,0 +1,253 @@
+"""
+Management command for BrandBrain compile worker.
+
+PR-6: Durable job worker for compile orchestration.
+
+Usage:
+    python manage.py brandbrain_worker
+
+Options:
+    --poll-interval: Seconds between job queue polls (default: 5)
+    --stale-check-interval: Seconds between stale lock checks (default: 60)
+    --max-jobs: Max jobs to process before exiting (0 = unlimited, default: 0)
+    --once: Process one job and exit (for testing)
+    --dry-run: Claim and log jobs without processing
+
+The worker:
+1. Polls for available jobs
+2. Claims next job with atomic locking
+3. Executes the compile pipeline with heartbeat
+4. Marks job succeeded/failed with retry logic
+5. Periodically checks for stale locks
+
+Heartbeat:
+- During job execution, lock is extended every HEARTBEAT_INTERVAL_S
+- Prevents stale lock detection from releasing actively running jobs
+- Uses background thread that stops when job completes
+
+Graceful shutdown:
+- SIGINT/SIGTERM triggers graceful exit after current job completes
+- Current job is NOT interrupted
+"""
+
+from __future__ import annotations
+
+import logging
+import signal
+import socket
+import threading
+import time
+import uuid as uuid_module
+from typing import TYPE_CHECKING
+
+from django.core.management.base import BaseCommand
+
+from kairo.brandbrain.jobs.queue import (
+    claim_next_job,
+    complete_job,
+    extend_job_lock,
+    fail_job,
+    release_stale_jobs,
+)
+
+if TYPE_CHECKING:
+    from kairo.brandbrain.models import BrandBrainJob
+
+logger = logging.getLogger(__name__)
+
+# Heartbeat interval for extending job locks (seconds)
+# Should be less than DEFAULT_STALE_LOCK_MINUTES (10 min = 600s)
+HEARTBEAT_INTERVAL_S = 30
+
+
+class Command(BaseCommand):
+    """Run BrandBrain compile worker."""
+
+    help = "Run BrandBrain compile worker for processing durable jobs"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._shutdown_requested = False
+        self._worker_id = f"{socket.gethostname()}-{uuid_module.uuid4().hex[:8]}"
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--poll-interval",
+            type=int,
+            default=5,
+            help="Seconds between job queue polls (default: 5)",
+        )
+        parser.add_argument(
+            "--stale-check-interval",
+            type=int,
+            default=60,
+            help="Seconds between stale lock checks (default: 60)",
+        )
+        parser.add_argument(
+            "--max-jobs",
+            type=int,
+            default=0,
+            help="Max jobs to process before exiting (0 = unlimited)",
+        )
+        parser.add_argument(
+            "--once",
+            action="store_true",
+            help="Process one job and exit (for testing)",
+        )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Claim and log jobs without processing",
+        )
+
+    def handle(self, *args, **options):
+        poll_interval = options["poll_interval"]
+        stale_check_interval = options["stale_check_interval"]
+        max_jobs = options["max_jobs"]
+        once = options["once"]
+        dry_run = options["dry_run"]
+
+        # Register signal handlers for graceful shutdown
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
+
+        self.stdout.write(f"Starting BrandBrain worker: {self._worker_id}")
+        self.stdout.write(f"  Poll interval: {poll_interval}s")
+        self.stdout.write(f"  Stale check interval: {stale_check_interval}s")
+        if max_jobs > 0:
+            self.stdout.write(f"  Max jobs: {max_jobs}")
+        if dry_run:
+            self.stdout.write("  DRY RUN MODE - jobs will be claimed but not processed")
+        self.stdout.write("")
+
+        jobs_processed = 0
+        last_stale_check = time.monotonic()
+
+        while not self._shutdown_requested:
+            # Check for stale locks periodically
+            now = time.monotonic()
+            if now - last_stale_check >= stale_check_interval:
+                released = release_stale_jobs()
+                if released > 0:
+                    self.stdout.write(f"Released {released} stale job(s)")
+                last_stale_check = now
+
+            # Try to claim a job
+            result = claim_next_job(worker_id=self._worker_id)
+
+            if result.claimed and result.job:
+                job = result.job
+                self.stdout.write(
+                    f"Claimed job {job.id} (brand={job.brand_id}, "
+                    f"attempt {job.attempts}/{job.max_attempts})"
+                )
+
+                if dry_run:
+                    # Dry run: log and skip
+                    self.stdout.write("  [DRY RUN] Skipping execution")
+                    complete_job(job.id)
+                else:
+                    # Execute the job
+                    self._execute_job(job)
+
+                jobs_processed += 1
+
+                # Check exit conditions
+                if once:
+                    self.stdout.write("Exiting after one job (--once)")
+                    break
+                if max_jobs > 0 and jobs_processed >= max_jobs:
+                    self.stdout.write(f"Exiting after {max_jobs} job(s) (--max-jobs)")
+                    break
+
+            else:
+                # No job available - sleep and retry
+                time.sleep(poll_interval)
+
+        if self._shutdown_requested:
+            self.stdout.write("\nGraceful shutdown complete")
+
+        self.stdout.write(f"Worker exiting. Jobs processed: {jobs_processed}")
+
+    def _signal_handler(self, signum, frame):
+        """Handle shutdown signals."""
+        sig_name = signal.Signals(signum).name
+        self.stdout.write(f"\nReceived {sig_name}, shutting down gracefully...")
+        self._shutdown_requested = True
+
+    def _execute_job(self, job: "BrandBrainJob") -> None:
+        """
+        Execute a compile job with heartbeat.
+
+        Calls the compile worker function with job parameters.
+        Runs a heartbeat thread to extend the lock periodically,
+        preventing stale lock detection from releasing active jobs.
+        """
+        from kairo.brandbrain.compile.worker import execute_compile_job
+
+        # Event to signal heartbeat thread to stop
+        stop_heartbeat = threading.Event()
+
+        def heartbeat_loop():
+            """Background thread that extends job lock periodically."""
+            while not stop_heartbeat.wait(timeout=HEARTBEAT_INTERVAL_S):
+                try:
+                    extended = extend_job_lock(job.id, self._worker_id)
+                    if extended:
+                        logger.debug(
+                            "Heartbeat: extended lock for job %s",
+                            job.id,
+                        )
+                    else:
+                        # Lock extension failed - job may have been released
+                        logger.warning(
+                            "Heartbeat: failed to extend lock for job %s "
+                            "(job may have been released or completed)",
+                            job.id,
+                        )
+                except Exception as e:
+                    # Log but don't crash - heartbeat failure is non-fatal
+                    logger.warning(
+                        "Heartbeat error for job %s: %s",
+                        job.id,
+                        str(e),
+                    )
+
+        # Start heartbeat thread
+        heartbeat_thread = threading.Thread(
+            target=heartbeat_loop,
+            name=f"heartbeat-{job.id}",
+            daemon=True,
+        )
+        heartbeat_thread.start()
+
+        try:
+            # Extract job parameters
+            params = job.params_json or {}
+            force_refresh = params.get("force_refresh", False)
+
+            self.stdout.write(f"  Executing compile for brand {job.brand_id}...")
+
+            # Run the compile
+            execute_compile_job(
+                compile_run_id=job.compile_run_id,
+                force_refresh=force_refresh,
+            )
+
+            # Mark job succeeded
+            complete_job(job.id)
+            self.stdout.write(self.style.SUCCESS(f"  Job {job.id} succeeded"))
+
+        except Exception as e:
+            error_msg = str(e)
+            logger.exception("Job %s failed: %s", job.id, error_msg)
+
+            # Mark job failed (may retry)
+            fail_job(job.id, error_msg)
+            self.stdout.write(self.style.ERROR(f"  Job {job.id} failed: {error_msg[:100]}"))
+
+        finally:
+            # Stop heartbeat thread
+            stop_heartbeat.set()
+            # Wait briefly for thread to exit (non-blocking since daemon=True)
+            heartbeat_thread.join(timeout=1.0)
