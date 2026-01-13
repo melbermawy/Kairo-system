@@ -14,9 +14,32 @@ This migration:
 
 Note: Non-concurrent index creation is OK for now (pre-prod). Revisit before prod
 if table has significant data - may need CREATE INDEX CONCURRENTLY with atomic=False.
+
+PR-5: Made PostgreSQL-specific operations skip on SQLite for test compatibility.
 """
 
-from django.db import migrations
+from django.db import connection, migrations
+
+
+def is_postgresql():
+    """Check if we're running on PostgreSQL."""
+    return connection.vendor == "postgresql"
+
+
+def run_if_postgresql(sql):
+    """Return a function that runs SQL only on PostgreSQL."""
+    def forward(apps, schema_editor):
+        if is_postgresql():
+            schema_editor.execute(sql)
+    return forward
+
+
+def reverse_if_postgresql(sql):
+    """Return a function that runs reverse SQL only on PostgreSQL."""
+    def reverse(apps, schema_editor):
+        if is_postgresql():
+            schema_editor.execute(sql)
+    return reverse
 
 
 class Migration(migrations.Migration):
@@ -28,26 +51,26 @@ class Migration(migrations.Migration):
 
     operations = [
         # Drop the old index (from 0002) to recreate with clear naming
-        migrations.RunSQL(
-            sql="DROP INDEX IF EXISTS idx_nei_brand_published;",
-            reverse_sql="SELECT 1;",  # No-op for reverse
+        migrations.RunPython(
+            run_if_postgresql("DROP INDEX IF EXISTS idx_nei_brand_published;"),
+            reverse_if_postgresql("SELECT 1;"),  # No-op for reverse
         ),
         # Pattern C: Filter by (brand_id, platform), order by published_at
         # Used when selecting across all content_types for a platform
-        migrations.RunSQL(
-            sql="""
+        migrations.RunPython(
+            run_if_postgresql("""
                 CREATE INDEX idx_nei_brand_published
                 ON brandbrain_normalized_evidence_item (brand_id, platform, published_at DESC NULLS LAST);
-            """,
-            reverse_sql="DROP INDEX IF EXISTS idx_nei_brand_published;",
+            """),
+            reverse_if_postgresql("DROP INDEX IF EXISTS idx_nei_brand_published;"),
         ),
         # Pattern B: Filter by (brand_id, platform, content_type), order by published_at
         # Used when selecting specific content_type within a platform
-        migrations.RunSQL(
-            sql="""
+        migrations.RunPython(
+            run_if_postgresql("""
                 CREATE INDEX idx_nei_brand_published_ct
                 ON brandbrain_normalized_evidence_item (brand_id, platform, content_type, published_at DESC NULLS LAST);
-            """,
-            reverse_sql="DROP INDEX IF EXISTS idx_nei_brand_published_ct;",
+            """),
+            reverse_if_postgresql("DROP INDEX IF EXISTS idx_nei_brand_published_ct;"),
         ),
     ]

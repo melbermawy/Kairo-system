@@ -3,21 +3,14 @@ Pytest configuration for Kairo tests.
 
 PR-0: Basic setup for Django test environment.
 PR-0: BrandBrain test fixtures and helpers.
+PR-5: Fixed test DB configuration to use SQLite (no external dependencies).
+
+Database configuration is handled by kairo.settings_test (set in pyproject.toml).
 """
 
-import os
 import uuid
 
-import django
 import pytest
-
-
-def pytest_configure():
-    """Configure Django settings before tests run."""
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "kairo.settings")
-    # Use sqlite for tests by default (faster, no docker needed)
-    os.environ.setdefault("DATABASE_URL", "sqlite://:memory:")
-    django.setup()
 
 
 @pytest.fixture

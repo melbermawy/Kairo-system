@@ -24,7 +24,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "kairo.settings"
+DJANGO_SETTINGS_MODULE = "kairo.settings_test"
 python_files = ["test_*.py", "*_test.py"]
 testpaths = ["tests"]
 addopts = "-v"

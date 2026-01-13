@@ -5,6 +5,7 @@ PR-0: repo + env spine
 - Loads secrets from environment variables
 - Database via DATABASE_URL (postgres/supabase)
 - No business logic, no domain models
+PR-5: Skip dotenv in test mode to allow pytest to control DATABASE_URL
 """
 
 import os
@@ -14,7 +15,9 @@ import dj_database_url
 from dotenv import load_dotenv
 
 # Load .env file if present (for local dev)
-load_dotenv()
+# Skip in test mode to allow pytest to control environment variables
+if not os.environ.get("KAIRO_TEST_MODE"):
+    load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
