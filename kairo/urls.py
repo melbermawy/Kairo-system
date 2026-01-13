@@ -12,6 +12,11 @@ from django.urls import include, path
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("kairo.hero.urls")),
+    # PR-5: BrandBrain API endpoints
+    path(
+        "api/brands/<str:brand_id>/brandbrain/",
+        include("kairo.brandbrain.api.urls", namespace="brandbrain"),
+    ),
 ]
 
 # PRD-1: out of scope for PR-0 - future API routes:

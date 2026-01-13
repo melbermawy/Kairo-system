@@ -7,10 +7,20 @@ These tests verify:
 3. Required indexes exist per spec 1.2
 
 All tests marked @pytest.mark.db as they require Django DB access.
+
+Note: Many tests in this file use PostgreSQL-specific introspection queries
+(pg_indexes, information_schema) and are skipped when running on SQLite.
 """
 
 import pytest
 from django.db import connection
+
+
+# Skip decorator for PostgreSQL-only tests
+requires_postgres = pytest.mark.skipif(
+    connection.vendor != "postgresql",
+    reason="PostgreSQL-specific introspection (pg_indexes, information_schema)"
+)
 
 
 def _get_tables() -> set[str]:
@@ -43,10 +53,11 @@ def _get_indexes(table_name: str) -> set[str]:
         return {row[0] for row in cursor.fetchall()}
 
 
+@requires_postgres
 @pytest.mark.db
 @pytest.mark.django_db
 class TestMigrationsApply:
-    """Test that all migrations apply without errors."""
+    """Test that all migrations apply without errors (PostgreSQL introspection)."""
 
     def test_brandbrain_tables_exist(self):
         """All BrandBrain tables should exist after migrations."""
@@ -81,10 +92,11 @@ class TestMigrationsApply:
             assert col in columns, f"Expected column '{col}' not found in apify_run"
 
 
+@requires_postgres
 @pytest.mark.db
 @pytest.mark.django_db
 class TestIndexesExist:
-    """Test that required indexes exist per spec 1.2."""
+    """Test that required indexes exist per spec 1.2 (PostgreSQL introspection)."""
 
     def test_snapshot_brand_latest_index(self):
         """Index for GET /latest: brand_id, created_at DESC."""
@@ -127,10 +139,11 @@ class TestIndexesExist:
         assert "idx_source_brand_enabled" in indexes
 
 
+@requires_postgres
 @pytest.mark.db
 @pytest.mark.django_db
 class TestUniqueConstraintsExist:
-    """Test that uniqueness constraints exist per spec 1.2."""
+    """Test that uniqueness constraints exist per spec 1.2 (PostgreSQL introspection)."""
 
     def test_nei_external_id_partial_unique(self):
         """
@@ -315,8 +328,12 @@ class TestConstraintEnforcement:
                 identifier="testhandle",
             )
 
+    @requires_postgres
     def test_nei_external_id_partial_unique_enforced(self, test_brand):
-        """NEI with same external_id should fail (when not null)."""
+        """NEI with same external_id should fail (when not null).
+
+        Note: Uses PostgreSQL partial unique index, skipped on SQLite.
+        """
         from django.db import IntegrityError
         from kairo.brandbrain.models import NormalizedEvidenceItem
 
