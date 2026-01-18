@@ -2684,185 +2684,304 @@ jobs:
 
 ## 14. Execution Plan (Phases + PR Map)
 
-### Risk-Ordered PR Sequence
+### Preface: Why This Section Was Revised
 
-The PR order is designed to prevent BrandBrain v1 mistakes:
-1. Test harness first (prove we can detect regressions)
-2. Evidence quality gates (prevent thin-evidence synthesis)
-3. Then features
+This PR Map was revised on 2026-01-18 to reflect the actual state of the codebase after PR0, PR1, and PR1.1 were completed. The original plan was written before implementation began and assumed a different decomposition of work.
 
-### PR0: Golden Path Test Harness + Fixtures
+**Key clarifications:**
+
+1. **This is a planning artifact, not historical truth.** The completed PRs delivered all intended invariants but organized the work differently than originally specified.
+
+2. **Completed PRs may differ from the original order but do not violate the vision.** PR0 delivered foundational scaffolding (not just test harness). PR1 delivered the durable job queue, evidence gates, and worker infrastructure. PR1.1 fixed design hazards and added anti-regression enforcement.
+
+3. **The vision and invariants are preserved.** GET is read-only. POST is the only explicit trigger. No fabricated data. Evidence-backed opportunities only. Contract authority via OpenAPI.
+
+4. **Future PRs are renumbered for clarity.** The old PR2-PR7 are consolidated and reordered based on what infrastructure now exists.
+
+---
+
+### PR Map (v2) — Current State
+
+#### Completed PRs
+
+| PR | Status | Summary |
+|----|--------|---------|
+| **PR0** | ✅ Completed | Foundational scaffolding: TodayBoard state machine, DTOs, read-only GET, async POST, contract authority endpoints |
+| **PR1** | ✅ Completed | Durable job queue, OpportunitiesBoard model, evidence gates, background worker, first-run auto-enqueue |
+| **PR1.1** | ✅ Completed | Design hazard fixes: ready_reason codes, referential integrity, stuck job error boards, anti-regression tests |
+
+---
+
+### PR0: Foundational Scaffolding [COMPLETED]
+
+**What Was Delivered:**
+- `TodayBoardState` enum with 5 states (not_generated_yet, generating, ready, insufficient_evidence, error)
+- `TodayBoardMetaDTO` with state machine fields
+- `EvidenceShortfallDTO` for evidence insufficiency details
+- `RegenerateResponseDTO` with async 202 pattern
+- Read-only `get_today_board()` service (no LLM, no Apify)
+- `POST /regenerate/` returns job_id immediately
+- `/api/health/` and `/api/openapi.json` contract endpoints
+- `tests/test_opportunities_v2_golden_path.py` test structure
+
+**Files Touched:**
+- `kairo/core/enums.py` — Added TodayBoardState
+- `kairo/hero/dto.py` — Updated with state machine DTOs
+- `kairo/hero/services/today_service.py` — Rewritten for state machine
+- `kairo/hero/api_views.py` — Updated endpoints
+- `kairo/core/api/views.py`, `kairo/core/api/urls.py` — Contract endpoints
+- `tests/test_opportunities_v2_golden_path.py` — Test harness
+
+**Risks Closed:**
+- GET endpoint doing heavy work
+- No clear state machine for board lifecycle
+- Missing contract authority mechanism
+
+---
+
+### PR1: Durable Job Queue + Evidence Gates [COMPLETED]
+
+**What Was Delivered:**
+- `OpportunitiesBoard` model with persistence
+- `OpportunitiesJob` model with status tracking
+- Background worker management command (`opportunities_worker`)
+- Job queue operations: enqueue, claim, complete, fail
+- Evidence quality gates (MIN_EVIDENCE_ITEMS=8, MIN_TRANSCRIPT_COVERAGE=0.3)
+- First-run auto-enqueue when evidence is sufficient
+- Cache integration with TTL
+- 22 PR1 tests + expanded golden path tests
+
+**Files Created:**
+- `kairo/hero/models/opportunities_board.py`
+- `kairo/hero/models/opportunities_job.py`
+- `kairo/hero/jobs/queue.py`
+- `kairo/hero/tasks/generate.py`
+- `kairo/hero/management/commands/opportunities_worker.py`
+- `tests/test_opportunities_v2_pr1.py`
+
+**Files Modified:**
+- `kairo/hero/services/today_service.py` — Integrated with job queue
+- `kairo/hero/dto.py` — Added job tracking fields
+
+**Risks Closed:**
+- No persistence for generated boards
+- No background job execution
+- No evidence quality enforcement
+- No first-run experience
+
+---
+
+### PR1.1: Design Hazard Fixes + Anti-Regression [COMPLETED]
+
+**What Was Delivered:**
+- `ReadyReason` codes: `generated`, `gates_only_no_synthesis`, `no_valid_candidates`, `empty_brand_context`
+- `ready_reason` field on `TodayBoardMetaDTO` and `OpportunitiesBoard`
+- `validate_referential_integrity()` method on board
+- `_create_error_board_for_stuck_job()` for stuck job recovery
+- Error boards created when jobs permanently fail
+- AST-based anti-regression tests (no Apify imports, no LLM imports in PR1)
+- GET read-only enforcement tests
+- State invariant enforcement tests
+- 14 PR1.1 tests
+
+**Files Modified:**
+- `kairo/hero/dto.py` — Added ReadyReason, ready_reason field
+- `kairo/hero/models/opportunities_board.py` — Added ready_reason column, integrity check
+- `kairo/hero/tasks/generate.py` — Sets ready_reason on board creation
+- `kairo/hero/jobs/queue.py` — Stuck job error board creation
+
+**Files Created:**
+- `tests/test_opportunities_v2_pr1_1.py` — Anti-regression tests
+- `docs/PR1_1_REVIEW.md` — Review document
+
+**Risks Closed:**
+- Ambiguous ready state with empty opportunities
+- No referential integrity validation
+- Stuck jobs leaving system in limbo
+- No automated invariant enforcement
+
+---
+
+### Future PRs
+
+#### PR2: LLM Synthesis Pipeline
 
 **Scope:**
-- Create `tests/fixtures/golden_path/` with realistic anonymized data
-- Implement `TestGoldenPathIntegration` test class
-- Add CI workflow for golden path test
-- Document fixture generation process
+- Implement actual LLM-based opportunity synthesis
+- Wire evidence → LLM → scored opportunities pipeline
+- Add `evidence_ids` linking (opportunities reference their source evidence)
+- Implement anti-slop validation on LLM output
+- Update `ready_reason=GENERATED` when synthesis produces opportunities
 
-**Files:**
-- `tests/fixtures/golden_path/` (new directory)
-- `tests/integration/test_golden_path.py` (new)
-- `.github/workflows/golden-path.yml` (new)
-- `tests/fixtures/golden_path/README.md` (new)
+**Subsystems:**
+- `kairo/hero/engines/opportunities_engine.py` (new)
+- `kairo/hero/graphs/opportunities_graph.py` (new or refactor)
+- `kairo/hero/services/scoring_service.py` (new)
 
 **Acceptance Criteria:**
-- Golden path test runs and FAILS (because v2 features don't exist yet)
-- Fixtures are realistic (captured from real Apify runs)
-- CI blocks merge if golden path fails
-- Test validates all critical invariants from §0.1
+- Worker processes job and calls LLM synthesis
+- Each opportunity has `evidence_ids` linking to source evidence
+- Anti-slop patterns (generic phrases, no evidence backing) trigger rejection
+- `ready_reason=GENERATED` set when opps > 0
+- Integration test: full generation with realistic evidence fixtures
 
-**Why First:** We need the test harness before implementing features to catch regressions.
+**Dependencies:** None (PR0-PR1.1 provide all infrastructure)
 
-### PR1: Evidence Quality Gates + Service
+**Risk Closed:** No actual opportunity generation
 
-**Scope:**
-- Implement `evidence_service.get_evidence_for_brand()` (read-only)
-- Implement `check_evidence_quality()` with thresholds
-- Add `EvidenceShortfallDTO` to contracts
-- Wire degraded response when gates fail
+---
 
-**Files:**
-- `kairo/hero/services/evidence_service.py` (new)
-- `kairo/hero/services/evidence_quality.py` (new)
-- `kairo/hero/dto.py` (add EvidenceShortfallDTO)
-- `tests/hero/services/test_evidence_quality.py` (new)
-
-**Acceptance Criteria:**
-- `get_evidence_for_brand()` reads from DB only (no Apify imports)
-- Quality gates reject thin evidence (< 8 items, < 30% transcript)
-- Degraded response includes remediation instructions
-- CI test verifies no Apify imports in `kairo/hero/`
-
-**Why Second:** Quality gates must exist before synthesis to prevent hallucination.
-
-### PR2: Contract Pipeline + OpenAPI
+#### PR3: Contract Pipeline + OpenAPI
 
 **Scope:**
-- Add OpenAPI generation (`export_openapi` command)
-- Add CI workflow for contract validation
-- Update DTOs with v2 fields (evidence_ids, why_now, etc.)
-- Generate TypeScript types for `kairo-frontend`
+- Add OpenAPI schema generation (`python manage.py export_openapi`)
+- Commit `openapi.json` to repo
+- Add CI check for schema drift
+- Document optional field semantics in schema
 
-**Files:**
+**Subsystems:**
 - `kairo/core/management/commands/export_openapi.py` (new)
-- `kairo/hero/dto.py` (update with v2 fields)
 - `.github/workflows/contract-check.yml` (new)
 - `openapi.json` (generated, committed)
 
 **Acceptance Criteria:**
-- `python manage.py export_openapi` generates valid OpenAPI 3.1
-- CI fails if openapi.json drifts
-- `kairo-frontend` can generate types from spec
-- Optional fields marked `nullable: true` in schema
+- `python manage.py export_openapi` produces valid OpenAPI 3.1 schema
+- CI fails if committed `openapi.json` differs from generated
+- Optional fields have `nullable: true` in schema
+- `kairo-frontend` can run `generate:types` against the schema
 
-### PR3: Performance Budgets + Caching
+**Dependencies:** PR2 (complete DTOs for synthesis)
+
+**Risk Closed:** Frontend/backend contract drift
+
+---
+
+#### PR4: Performance Budgets + Observability
 
 **Scope:**
-- Implement hard timeout enforcement
-- Add caching layer with TTL
-- Add timing fields to TodayBoardMetaDTO
-- Add `BudgetExceededError` handling
+- Implement hard timeout enforcement in worker
+- Add timing fields to diagnostics_json
+- Add structured logging with job_id, brand_id, worker_id
+- Add optional metrics endpoint for operational visibility
 
-**Files:**
-- `kairo/hero/budgets.py` (new - constants)
-- `kairo/hero/services/today_service.py` (add caching)
-- `kairo/hero/engines/opportunities_engine.py` (add budget checks)
-- `tests/hero/test_budgets.py` (new)
+**Subsystems:**
+- `kairo/hero/budgets.py` (constants)
+- `kairo/hero/tasks/generate.py` (timeout enforcement)
+- Worker logging enhancements
 
 **Acceptance Criteria:**
-- GET /today/ returns within 15s or degrades
-- Cache hit returns within 200ms
-- `meta.cache_hit`, `meta.cache_key`, `meta.wall_time_ms` populated
-- Budget exceeded triggers degraded response (not error)
+- Generation times out after BUDGET_LLM_SYNTHESIS_S (10s)
+- Timeout creates error board with remediation
+- `diagnostics_json` includes `wall_time_ms`, `evidence_fetch_ms`, `synthesis_ms`
+- All worker logs include structured fields
 
-### PR4: Graph IO Contract + Validation
+**Dependencies:** PR2 (actual synthesis to time)
 
-**Scope:**
-- Refactor synthesis pipeline with explicit IO contracts
-- Implement anti-slop validation
-- Add `evidence_ids` requirement enforcement
-- Add determinism configuration
+**Risk Closed:** Runaway LLM calls, undebuggable failures
 
-**Files:**
-- `kairo/hero/graphs/config.py` (new)
-- `kairo/hero/graphs/validation.py` (new)
-- `kairo/hero/graphs/contracts.py` (new)
-- `kairo/hero/graphs/opportunities_graph.py` (refactor)
+---
 
-**Acceptance Criteria:**
-- Synthesis requires evidence_ids in output
-- Anti-slop patterns trigger rejection
-- Validation results logged with rejection reasons
-- Deterministic mode available for testing
-
-### PR5: Diagnostics + Observability
+#### PR5: Concept Model + Endpoints
 
 **Scope:**
-- Implement `OpportunityGenerationDiagnostics`
-- Add structured logging for all runs
-- Add optional DB storage for diagnostics
-- Create diagnostics dashboard (Grafana/similar)
+- Add `Concept` Django model per Appendix A schema
+- Implement CRUD endpoints: POST, GET, PATCH
+- Add idempotency support via `Idempotency-Key` header
+- Link concept to opportunity and brand
 
-**Files:**
-- `kairo/hero/diagnostics.py` (new)
-- `kairo/hero/engines/opportunities_engine.py` (add diagnostics)
-- `kairo/hero/models.py` (add OpportunityGenerationRun model)
-
-**Acceptance Criteria:**
-- Every generation run logs diagnostics JSON
-- Token counts, timings, evidence stats all captured
-- Dashboard shows tokens/day, cache hit rate, error rate
-- No dollar estimates (only token counts)
-
-### PR6: Concept Model + Endpoints
-
-**Scope:**
-- Add `Concept` Django model
-- Implement CRUD endpoints
-- Add idempotency support
-- Wire to opportunity detail
-
-**Files:**
-- `kairo/core/models.py` (add Concept)
-- `kairo/hero/api_views.py` (add concept endpoints)
+**Subsystems:**
+- `kairo/core/models.py` — Add Concept model
+- `kairo/hero/api_views.py` — Add concept endpoints
 - `kairo/hero/services/concept_service.py` (new)
 
 **Acceptance Criteria:**
-- POST /opportunities/{id}/concepts/ creates concept
-- Concept links to opportunity and brand
-- Idempotency-Key header prevents duplicates
+- POST `/api/opportunities/{id}/concepts/` creates concept
+- GET `/api/concepts/{id}/` returns concept
+- PATCH `/api/concepts/{id}/` updates concept
+- Duplicate POST with same Idempotency-Key returns existing concept
+- Concept.opportunity_id references existing Opportunity
 
-### PR7: Frontend Types + Integration
+**Dependencies:** PR2 (needs real opportunities to link concepts to)
+
+**Risk Closed:** No structured user intent capture before F2
+
+---
+
+#### PR6: Frontend Integration Support
 
 **Scope:**
-- Generate TypeScript types in `kairo-frontend`
-- Update components to use generated types
-- Implement optional field handling
-- Remove manual type definitions
+- Generate TypeScript types from `openapi.json`
+- Document frontend integration patterns
+- Ensure optional field handling is explicit
+- Update any sample components for evidence preview
 
-**Files (in kairo-frontend):**
-- `src/api/generated/types.ts` (generated)
-- `src/components/EvidencePreviewCard.tsx` (update)
-- `package.json` (add generate:types script)
+**Subsystems:**
+- `kairo-frontend/src/api/generated/types.ts` (generated)
+- `kairo-frontend/package.json` — Add generate:types script
+- Integration documentation
 
 **Acceptance Criteria:**
-- `npm run generate:types` produces types
-- Components handle missing optional fields
-- No manual API type definitions
-- Evidence cards render without thumbnails
+- `npm run generate:types` produces TypeScript types
+- Types match OpenAPI schema exactly
+- Documentation explains handling of optional fields
+- Evidence preview renders without thumbnail (text fallback)
 
-### Timeline Summary
+**Dependencies:** PR3 (OpenAPI schema must exist)
 
-| PR | Scope | Dependencies | Risk Mitigation |
-|----|-------|--------------|-----------------|
-| PR0 | Golden path test harness | None | Proves we can detect regressions |
-| PR1 | Evidence quality gates | PR0 | Prevents thin-evidence synthesis |
-| PR2 | Contract pipeline | None | Prevents frontend drift |
-| PR3 | Performance budgets | PR1 | Prevents slow/runaway requests |
-| PR4 | Graph IO contract | PR1, PR2 | Ensures quality output |
-| PR5 | Diagnostics | PR3, PR4 | Enables debugging |
-| PR6 | Concept model | PR2 | New feature |
-| PR7 | Frontend types | PR2, PR4 | Closes frontend loop |
+**Risk Closed:** Manual type drift, optional field crashes
+
+---
+
+### Dependency Graph
+
+```
+PR0 ─────┬─────► PR1 ─────► PR1.1 ─────► PR2 (Synthesis)
+         │                                    │
+         │                                    ├─────► PR3 (OpenAPI)
+         │                                    │            │
+         │                                    │            └─────► PR6 (Frontend)
+         │                                    │
+         │                                    └─────► PR4 (Budgets)
+         │
+         │                                    └─────► PR5 (Concepts)
+         │                                             │
+         └───────────────────────────────────────────────► (requires PR2 opps)
+```
+
+**Parallelization Notes:**
+- PR3 and PR4 can run in parallel after PR2
+- PR5 can start after PR2 (needs real opportunities)
+- PR6 depends on PR3 (needs OpenAPI schema)
+
+---
+
+### Summary Table
+
+| PR | Scope | Dependencies | Status | Risk Closed |
+|----|-------|--------------|--------|-------------|
+| PR0 | Foundational scaffolding | None | ✅ Complete | GET doing work, no state machine |
+| PR1 | Job queue + evidence gates | PR0 | ✅ Complete | No persistence, no background jobs |
+| PR1.1 | Design hazards + anti-regression | PR1 | ✅ Complete | Ambiguous states, no enforcement |
+| PR2 | LLM synthesis pipeline | PR1.1 | 🔲 Next | No actual generation |
+| PR3 | OpenAPI contract pipeline | PR2 | 🔲 Pending | Contract drift |
+| PR4 | Performance budgets | PR2 | 🔲 Pending | Runaway requests |
+| PR5 | Concept model | PR2 | 🔲 Pending | No user intent capture |
+| PR6 | Frontend integration | PR3 | 🔲 Pending | Type drift |
+
+---
+
+### Invariants Preserved Across All PRs
+
+These invariants are enforced by tests and must never be violated:
+
+| Invariant | Enforcement | Test File |
+|-----------|-------------|-----------|
+| GET /today is read-only | Tests verify no job creation when board exists | `test_opportunities_v2_pr1_1.py` |
+| No Apify imports in hero engine | AST-based scan of kairo/hero/ | `test_opportunities_v2_pr1_1.py` |
+| No LLM imports in PR1 generate task | AST-based scan | `test_opportunities_v2_pr1_1.py` |
+| Ready + empty opps → ready_reason set | Invariant assertion test | `test_opportunities_v2_pr1_1.py` |
+| opportunity_ids reference real records | `validate_referential_integrity()` | `test_opportunities_v2_pr1_1.py` |
+| Stuck jobs create error boards | Stale job handling test | `test_opportunities_v2_pr1_1.py` |
 
 ---
 
