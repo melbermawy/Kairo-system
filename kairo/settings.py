@@ -69,6 +69,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "kairo.middleware.timing.RequestTimingMiddleware",  # PR-7: API request timing
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -108,13 +109,31 @@ DATABASE_URL = os.environ.get(
     f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
 )
 
+# PgBouncer transaction mode compatibility (port 6543):
+# - CONN_MAX_AGE=0: Close connections after each request to avoid pooler issues
+#   PgBouncer transaction mode doesn't preserve session state between transactions,
+#   so persistent connections can cause "prepared statement does not exist" errors.
+# - conn_health_checks=False: Disable since we're not keeping connections open
+# - For SQLite (local dev), these settings are harmless
+#
+# If using session mode pooling (port 5432), you can set:
+#   KAIRO_DB_CONN_MAX_AGE=600 for persistent connections
+CONN_MAX_AGE = int(os.environ.get("KAIRO_DB_CONN_MAX_AGE", "0"))
+
 DATABASES = {
     "default": dj_database_url.parse(
         DATABASE_URL,
-        conn_max_age=600,
-        conn_health_checks=True,
+        conn_max_age=CONN_MAX_AGE,
+        conn_health_checks=CONN_MAX_AGE > 0,  # Only check if connections are persistent
     )
 }
+
+# Add statement timeout for safety (5 seconds default, configurable)
+# Prevents runaway queries from blocking the pooler
+_STATEMENT_TIMEOUT_MS = int(os.environ.get("KAIRO_DB_STATEMENT_TIMEOUT_MS", "5000"))
+if "postgresql" in DATABASE_URL or "postgres" in DATABASE_URL:
+    DATABASES["default"]["OPTIONS"] = DATABASES["default"].get("OPTIONS", {})
+    DATABASES["default"]["OPTIONS"]["options"] = f"-c statement_timeout={_STATEMENT_TIMEOUT_MS}"
 
 
 # =============================================================================

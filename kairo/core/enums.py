@@ -113,3 +113,28 @@ class DecisionType(models.TextChoices):
     VARIANT_EDITED = "variant_edited", "Variant edited"
     VARIANT_APPROVED = "variant_approved", "Variant approved"
     VARIANT_REJECTED = "variant_rejected", "Variant rejected"
+
+
+class TodayBoardState(models.TextChoices):
+    """
+    TodayBoard state machine states.
+
+    PR0: Foundational scaffolding for opportunities v2.
+    Per opportunities_v1_prd.md §0.2.
+
+    State transitions:
+    - not_generated_yet -> generating (via POST /regenerate/ or first-run auto-enqueue)
+    - generating -> ready (success)
+    - generating -> insufficient_evidence (evidence gates failed)
+    - generating -> error (LLM error, timeout, etc.)
+    - ready -> generating (via POST /regenerate/)
+    - insufficient_evidence -> generating (via POST /regenerate/)
+    - error -> generating (via POST /regenerate/)
+
+    CRITICAL: GET /today/ MUST NEVER transition states except for first-run auto-enqueue.
+    """
+    NOT_GENERATED_YET = "not_generated_yet", "Not Generated Yet"
+    GENERATING = "generating", "Generating"
+    READY = "ready", "Ready"
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence", "Insufficient Evidence"
+    ERROR = "error", "Error"

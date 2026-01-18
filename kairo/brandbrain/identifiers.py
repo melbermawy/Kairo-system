@@ -2,14 +2,14 @@
 Identifier normalization for SourceConnection.
 
 PR-1: Normalize identifiers before save to ensure uniqueness constraint works correctly.
-
-Conservative approach: only normalize obvious duplicates, no heavy parsing.
+PR-7: Enhanced normalization - strip query params, canonicalize handles.
 
 Platform-specific rules:
-- instagram/tiktok: strip leading '@' from handles
+- instagram/tiktok: strip leading '@' from handles, extract username from URLs
 - linkedin company_posts: if URL, extract slug; if slug, lowercase
-- web/youtube: only trim whitespace + strip trailing slash from URLs
-- ALL URLs: lowercase scheme+host only (preserve path case and query string)
+- youtube: extract channel ID or handle from URLs
+- web: strip query params and fragments, normalize to canonical URL
+- ALL URLs: lowercase scheme+host, strip trailing slash
 """
 
 from __future__ import annotations
@@ -30,14 +30,16 @@ def normalize_source_identifier(platform: str, capability: str, identifier: str)
     Returns:
         Normalized identifier string.
 
-    Normalization rules (conservative, platform-aware):
+    Normalization rules (PR-7 enhanced):
     - Strip leading/trailing whitespace (all)
-    - URLs: lowercase scheme+host only, preserve path case and query string
-    - URLs: strip trailing slash from path only
-    - instagram/tiktok handles: strip leading '@'
-    - linkedin company_posts URLs: extract slug after /company/
-    - linkedin company_posts slugs: lowercase
-    - web/youtube: no handle rules, only URL normalization
+    - URLs: lowercase scheme+host
+    - URLs: strip trailing slash from path
+    - URLs: strip query params and fragments for social platforms
+    - instagram: extract username from profile URLs, strip '@'
+    - tiktok: extract username from profile URLs, strip '@'
+    - linkedin company_posts: extract slug from URLs, lowercase
+    - youtube: extract channel ID or handle from URLs
+    - web: preserve query params (they may be significant)
     """
     if not identifier:
         return identifier
@@ -64,39 +66,83 @@ def _normalize_url_identifier(platform: str, capability: str, identifier: str) -
     """
     Normalize URL-based identifiers.
 
-    Rules:
-    - Lowercase scheme and host only (NOT path or query)
+    Rules (PR-7 enhanced):
+    - Lowercase scheme and host
     - Strip trailing slash from path
-    - Preserve query string and fragment
-    - LinkedIn company URLs: extract and lowercase slug
-    - No www stripping (too risky for general use)
+    - Strip query params and fragments for social platforms (idempotency)
+    - Extract username/slug from social profile URLs
+    - Preserve query params for web crawl (they may be significant)
     """
     try:
         parsed = urlparse(identifier)
 
-        # Lowercase scheme and host only
+        # Lowercase scheme and host
         scheme = parsed.scheme.lower() if parsed.scheme else "https"
         host = parsed.netloc.lower() if parsed.netloc else ""
 
-        # Path: strip trailing slash, but preserve case
+        # Path: strip trailing slash
         path = parsed.path.rstrip("/")
 
-        # LinkedIn company: extract slug (special case)
-        if platform == "linkedin" and capability == "company_posts":
-            # For LinkedIn, we DO strip www and extract just the slug
+        # Platform-specific extraction
+        if platform == "instagram":
+            # Extract username from instagram.com/username URLs
+            match = re.search(r"instagram\.com/([^/?#]+)", host + path, re.IGNORECASE)
+            if match:
+                username = match.group(1).lower()
+                # Skip non-profile paths like /p/, /reel/, /stories/
+                if username not in ("p", "reel", "reels", "stories", "explore", "tv"):
+                    return username
+
+        elif platform == "tiktok":
+            # Extract username from tiktok.com/@username URLs
+            match = re.search(r"tiktok\.com/@?([^/?#]+)", host + path, re.IGNORECASE)
+            if match:
+                return match.group(1).lower().lstrip("@")
+
+        elif platform == "linkedin" and capability == "company_posts":
+            # Extract slug from linkedin.com/company/slug URLs
             match = re.search(r"/company/([^/?#]+)", path, re.IGNORECASE)
             if match:
                 return match.group(1).lower()
 
-        # Rebuild URL preserving query and fragment
-        # urlunparse expects: (scheme, netloc, path, params, query, fragment)
+        elif platform == "youtube":
+            # Extract channel ID or handle from various YouTube URL formats
+            # youtube.com/channel/UC... or youtube.com/@handle or youtube.com/c/name
+            if "/channel/" in path:
+                match = re.search(r"/channel/([^/?#]+)", path)
+                if match:
+                    return match.group(1)  # Channel IDs are case-sensitive
+            elif "/@" in path:
+                match = re.search(r"/@([^/?#]+)", path)
+                if match:
+                    return "@" + match.group(1).lower()
+            elif "/c/" in path:
+                match = re.search(r"/c/([^/?#]+)", path)
+                if match:
+                    return match.group(1).lower()
+
+        elif platform == "web":
+            # For web crawl, preserve query params (they may be significant)
+            # But still normalize scheme/host and strip fragment
+            normalized = urlunparse((
+                scheme,
+                host,
+                path,
+                parsed.params,
+                parsed.query,
+                "",  # Strip fragment
+            ))
+            return normalized
+
+        # Default for social platforms: strip query params and fragment
+        # (tracking params like ?utm_source shouldn't create duplicates)
         normalized = urlunparse((
             scheme,
             host,
             path,
-            parsed.params,
-            parsed.query,
-            parsed.fragment,
+            "",  # Strip params
+            "",  # Strip query
+            "",  # Strip fragment
         ))
 
         return normalized

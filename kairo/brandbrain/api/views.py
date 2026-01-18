@@ -97,66 +97,86 @@ def compile_kickoff(request, brand_id: str) -> JsonResponse:
 
     Response (404 - brand not found):
         {"error": "Brand not found"}
+
+    Response (500 - internal error):
+        {"error": "Internal server error"}  # Stack hidden when DEBUG off
     """
-    # Parse brand_id
-    parsed_brand_id = _parse_uuid(brand_id)
-    if not parsed_brand_id:
-        return JsonResponse({"error": "Invalid brand_id"}, status=400)
+    from django.conf import settings
 
-    # Check brand exists
-    if not _brand_exists(parsed_brand_id):
-        return JsonResponse({"error": "Brand not found"}, status=404)
+    try:
+        # Parse brand_id
+        parsed_brand_id = _parse_uuid(brand_id)
+        if not parsed_brand_id:
+            return JsonResponse({"error": "Invalid brand_id"}, status=400)
 
-    # Parse request body
-    force_refresh = False
-    if request.body:
-        try:
-            body = json.loads(request.body)
-            force_refresh = body.get("force_refresh", False)
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON body"}, status=400)
+        # Check brand exists
+        if not _brand_exists(parsed_brand_id):
+            return JsonResponse({"error": "Brand not found"}, status=404)
 
-    # Check gating first for better error messages
-    gating = check_compile_gating(parsed_brand_id)
-    if not gating.allowed:
-        return JsonResponse({
-            "error": "Compile gating failed",
-            "errors": [{"code": e.code, "message": e.message} for e in gating.errors],
-        }, status=422)
+        # Parse request body
+        force_refresh = False
+        if request.body:
+            try:
+                body = json.loads(request.body)
+                force_refresh = body.get("force_refresh", False)
+            except json.JSONDecodeError:
+                return JsonResponse({"error": "Invalid JSON body"}, status=400)
 
-    # Kick off compile
-    result = compile_brandbrain(
-        brand_id=parsed_brand_id,
-        force_refresh=force_refresh,
-    )
+        # Check gating first for better error messages
+        gating = check_compile_gating(parsed_brand_id)
+        if not gating.allowed:
+            return JsonResponse({
+                "error": "Compile gating failed",
+                "errors": [{"code": e.code, "message": e.message} for e in gating.errors],
+            }, status=422)
 
-    # Handle result
-    if result.status == "FAILED":
-        return JsonResponse({
-            "error": result.error,
-        }, status=422)
+        # Kick off compile
+        result = compile_brandbrain(
+            brand_id=parsed_brand_id,
+            force_refresh=force_refresh,
+        )
 
-    if result.status == "UNCHANGED":
-        # Short-circuit - return existing snapshot
-        response_data = {
-            "compile_run_id": str(result.compile_run_id),
-            "status": "UNCHANGED",
-        }
-        if result.snapshot:
-            response_data["snapshot"] = {
-                "snapshot_id": str(result.snapshot.id),
-                "brand_id": str(result.snapshot.brand_id),
-                "created_at": result.snapshot.created_at.isoformat(),
-                "snapshot_json": result.snapshot.snapshot_json,
+        # Handle result
+        if result.status == "FAILED":
+            return JsonResponse({
+                "error": result.error,
+            }, status=422)
+
+        if result.status == "UNCHANGED":
+            # Short-circuit - return existing snapshot
+            response_data = {
+                "compile_run_id": str(result.compile_run_id),
+                "status": "UNCHANGED",
             }
-        return JsonResponse(response_data, status=200)
+            if result.snapshot:
+                response_data["snapshot"] = {
+                    "snapshot_id": str(result.snapshot.id),
+                    "brand_id": str(result.snapshot.brand_id),
+                    "created_at": result.snapshot.created_at.isoformat(),
+                    "snapshot_json": result.snapshot.snapshot_json,
+                }
+            return JsonResponse(response_data, status=200)
 
-    # Normal kickoff - return 202
-    return JsonResponse({
-        "compile_run_id": str(result.compile_run_id),
-        "status": result.status,
-        "poll_url": result.poll_url,
-    }, status=202)
+        # Normal kickoff - return 202
+        return JsonResponse({
+            "compile_run_id": str(result.compile_run_id),
+            "status": result.status,
+            "poll_url": result.poll_url,
+        }, status=202)
+
+    except Exception as e:
+        # Log full exception with stack trace
+        logger.exception("Unhandled exception in compile_kickoff for brand %s", brand_id)
+
+        # Return sanitized error - hide stack trace in production
+        if settings.DEBUG:
+            return JsonResponse({
+                "error": f"Internal server error: {str(e)}",
+            }, status=500)
+        else:
+            return JsonResponse({
+                "error": "Internal server error",
+            }, status=500)
 
 
 @require_http_methods(["GET"])

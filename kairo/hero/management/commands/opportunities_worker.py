@@ -1,10 +1,11 @@
 """
-Management command for BrandBrain compile worker.
+Management command for Opportunities generation worker.
 
-PR-6: Durable job worker for compile orchestration.
+PR1: Background execution infrastructure for opportunities v2.
+Per opportunities_v1_prd.md §0.2 - TodayBoard State Machine.
 
 Usage:
-    python manage.py brandbrain_worker
+    python manage.py opportunities_worker
 
 Options:
     --poll-interval: Seconds between job queue polls (default: 5)
@@ -16,18 +17,15 @@ Options:
 The worker:
 1. Polls for available jobs
 2. Claims next job with atomic locking
-3. Executes the compile pipeline with heartbeat
-4. Marks job succeeded/failed with retry logic
+3. Executes evidence gates (NO LLM in PR1)
+4. Marks job succeeded/failed/insufficient_evidence
 5. Periodically checks for stale locks
 
-Heartbeat:
-- During job execution, lock is extended every HEARTBEAT_INTERVAL_S
-- Prevents stale lock detection from releasing actively running jobs
-- Uses background thread that stops when job completes
-
-Graceful shutdown:
-- SIGINT/SIGTERM triggers graceful exit after current job completes
-- Current job is NOT interrupted
+CRITICAL (PR1):
+- NO LLM calls
+- NO prompt execution
+- NO synthesis
+- ONLY evidence gates and state transitions
 """
 
 from __future__ import annotations
@@ -42,28 +40,28 @@ from typing import TYPE_CHECKING
 
 from django.core.management.base import BaseCommand
 
-from kairo.brandbrain.jobs.queue import (
+from kairo.hero.jobs.queue import (
     claim_next_job,
     complete_job,
     extend_job_lock,
     fail_job,
+    fail_job_insufficient_evidence,
     release_stale_jobs,
 )
 
 if TYPE_CHECKING:
-    from kairo.brandbrain.models import BrandBrainJob
+    from kairo.hero.models import OpportunitiesJob
 
 logger = logging.getLogger(__name__)
 
 # Heartbeat interval for extending job locks (seconds)
-# Should be less than DEFAULT_STALE_LOCK_MINUTES (10 min = 600s)
 HEARTBEAT_INTERVAL_S = 30
 
 
 class Command(BaseCommand):
-    """Run BrandBrain compile worker."""
+    """Run Opportunities generation worker."""
 
-    help = "Run BrandBrain compile worker for processing durable jobs"
+    help = "Run Opportunities generation worker for processing durable jobs"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -111,7 +109,7 @@ class Command(BaseCommand):
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
-        self.stdout.write(f"Starting BrandBrain worker: {self._worker_id}")
+        self.stdout.write(f"Starting Opportunities worker: {self._worker_id}")
         self.stdout.write(f"  Poll interval: {poll_interval}s")
         self.stdout.write(f"  Stale check interval: {stale_check_interval}s")
         if max_jobs > 0:
@@ -119,17 +117,9 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write("  DRY RUN MODE - jobs will be claimed but not processed")
 
-        # Log LLM configuration at worker startup
-        import os
-        llm_disabled = os.environ.get("LLM_DISABLED", "").lower() in ("true", "1", "yes", "on")
-        openai_key_present = bool(os.environ.get("OPENAI_API_KEY"))
-        heavy_model = os.environ.get("KAIRO_LLM_MODEL_HEAVY", "gpt-4")
-        self.stdout.write(f"  LLM config:")
-        self.stdout.write(f"    LLM_DISABLED: {llm_disabled}")
-        self.stdout.write(f"    OPENAI_API_KEY present: {openai_key_present}")
-        self.stdout.write(f"    Heavy model: {heavy_model}")
-        if not openai_key_present and not llm_disabled:
-            self.stdout.write(self.style.WARNING("    WARNING: OPENAI_API_KEY not set - compiles will use stub output!"))
+        # PR1: Explicitly note that NO LLM calls are made
+        self.stdout.write("")
+        self.stdout.write(self.style.WARNING("  PR1 MODE: Evidence gates only, NO LLM synthesis"))
         self.stdout.write("")
 
         jobs_processed = 0
@@ -187,15 +177,20 @@ class Command(BaseCommand):
         self.stdout.write(f"\nReceived {sig_name}, shutting down gracefully...")
         self._shutdown_requested = True
 
-    def _execute_job(self, job: "BrandBrainJob") -> None:
+    def _execute_job(self, job: "OpportunitiesJob") -> None:
         """
-        Execute a compile job with heartbeat.
+        Execute an opportunities generation job.
 
-        Calls the compile worker function with job parameters.
-        Runs a heartbeat thread to extend the lock periodically,
-        preventing stale lock detection from releasing active jobs.
+        PR1: Evidence gates ONLY. No LLM synthesis.
+
+        Pipeline:
+        1. Fetch evidence from NormalizedEvidenceItem
+        2. Run quality gates
+        3. Run usability gates
+        4. If gates pass: mark SUCCEEDED (no synthesis yet)
+        5. If gates fail: mark INSUFFICIENT_EVIDENCE
         """
-        from kairo.brandbrain.compile.worker import execute_compile_job
+        from kairo.hero.tasks.generate import execute_opportunities_job
 
         # Event to signal heartbeat thread to stop
         stop_heartbeat = threading.Event()
@@ -211,14 +206,11 @@ class Command(BaseCommand):
                             job.id,
                         )
                     else:
-                        # Lock extension failed - job may have been released
                         logger.warning(
-                            "Heartbeat: failed to extend lock for job %s "
-                            "(job may have been released or completed)",
+                            "Heartbeat: failed to extend lock for job %s",
                             job.id,
                         )
                 except Exception as e:
-                    # Log but don't crash - heartbeat failure is non-fatal
                     logger.warning(
                         "Heartbeat error for job %s: %s",
                         job.id,
@@ -234,21 +226,22 @@ class Command(BaseCommand):
         heartbeat_thread.start()
 
         try:
-            # Extract job parameters
-            params = job.params_json or {}
-            force_refresh = params.get("force_refresh", False)
+            self.stdout.write(f"  Executing evidence gates for brand {job.brand_id}...")
 
-            self.stdout.write(f"  Executing compile for brand {job.brand_id}...")
-
-            # Run the compile
-            execute_compile_job(
-                compile_run_id=job.compile_run_id,
-                force_refresh=force_refresh,
+            # Run the generation task (PR1: gates only)
+            result = execute_opportunities_job(
+                job_id=job.id,
+                brand_id=job.brand_id,
             )
 
-            # Mark job succeeded
-            complete_job(job.id)
-            self.stdout.write(self.style.SUCCESS(f"  Job {job.id} succeeded"))
+            if result.success:
+                self.stdout.write(self.style.SUCCESS(f"  Job {job.id} succeeded"))
+            elif result.insufficient_evidence:
+                self.stdout.write(
+                    self.style.WARNING(f"  Job {job.id} completed: insufficient_evidence")
+                )
+            else:
+                self.stdout.write(self.style.ERROR(f"  Job {job.id} failed: {result.error}"))
 
         except Exception as e:
             error_msg = str(e)
@@ -261,5 +254,4 @@ class Command(BaseCommand):
         finally:
             # Stop heartbeat thread
             stop_heartbeat.set()
-            # Wait briefly for thread to exit (non-blocking since daemon=True)
             heartbeat_thread.join(timeout=1.0)
