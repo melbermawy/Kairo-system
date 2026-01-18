@@ -37,6 +37,7 @@ from kairo.core.enums import (
     PackageStatus,
     PatternCategory,
     PatternStatus,
+    TodayBoardState,
     VariantStatus,
 )
 
@@ -449,24 +450,100 @@ class ExternalSignalBundleDTO(BaseModel):
 # =============================================================================
 
 
+class EvidenceShortfallDTO(BaseModel):
+    """
+    Details about why evidence was insufficient.
+
+    PR0: Foundational scaffolding for opportunities v2.
+    Per opportunities_v1_prd.md §5.1.
+    """
+    required_items: int
+    found_items: int
+    required_platforms: list[str] = Field(default_factory=list)
+    found_platforms: list[str] = Field(default_factory=list)
+    missing_platforms: list[str] = Field(default_factory=list)
+    transcript_coverage: float = 0.0  # 0.0-1.0
+    min_transcript_coverage: float = 0.3  # Required threshold
+
+
+class ReadyReason(str):
+    """
+    Machine-parseable reason codes for state=ready with empty opportunities.
+
+    PR1.1: Added to disambiguate ready state semantics.
+
+    When state=ready and opportunities=[], one of these MUST be set:
+    - GATES_ONLY_NO_SYNTHESIS: Evidence gates passed, but LLM synthesis not implemented (PR1)
+    - NO_VALID_CANDIDATES: LLM ran but produced 0 valid opportunities after filtering
+    - EMPTY_BRAND_CONTEXT: Brand has no pillars/personas configured
+
+    When state=ready and opportunities.length > 0, ready_reason is typically "generated".
+    """
+    GENERATED = "generated"  # Normal case: synthesis ran and produced opportunities
+    GATES_ONLY_NO_SYNTHESIS = "gates_only_no_synthesis"  # PR1: gates passed, no synthesis yet
+    NO_VALID_CANDIDATES = "no_valid_candidates"  # Synthesis ran but all candidates filtered out
+    EMPTY_BRAND_CONTEXT = "empty_brand_context"  # Brand lacks pillars/personas
+
+
 class TodayBoardMetaDTO(BaseModel):
     """
     Metadata for Today board generation.
 
-    Per PRD-1 §3.3.6 and hero-loop-eval.md.
+    PR0: Updated with state machine per opportunities_v1_prd.md §0.2.
+    PR1.1: Added ready_reason for unambiguous state semantics.
+
+    CRITICAL STATE MACHINE (per §0.2):
+    - state: Current board state (not_generated_yet, generating, ready, insufficient_evidence, error)
+    - job_id: Present when state == "generating"
+
+    CRITICAL INVARIANT (PR1.1):
+    - If state=ready AND opportunities=[], ready_reason MUST be set to a non-null machine code.
+    - Allowed ready_reason values: "gates_only_no_synthesis", "no_valid_candidates", "empty_brand_context"
 
     Fields:
-    - degraded: True if board is fallback/incomplete (graph error, etc.)
-    - total_candidates: Count of raw candidates from graph before filtering
-    - reason: Short code/description if degraded (e.g. "graph_error")
+    - state: STATE MACHINE STATE (CRITICAL - see §0.2)
+    - ready_reason: Machine-parseable reason for ready state (required when ready with empty opps)
+    - job_id: Present when state == "generating"
+    - degraded: True if state in {"insufficient_evidence", "error"} (legacy, preserved for backwards compat)
+    - reason: Degradation reason code
+    - remediation: User-facing action to fix degraded state
     """
     generated_at: datetime
-    source: str = "hero_f1"  # Flow identifier
-    degraded: bool = False   # True if board is stale/incomplete
+    source: str = "hero_f1_v2"  # Flow identifier (updated for v2)
+
+    # STATE MACHINE (CRITICAL - see §0.2)
+    state: TodayBoardState = TodayBoardState.NOT_GENERATED_YET
+    job_id: str | None = None  # Present when state == "generating"
+
+    # PR1.1: Machine-parseable reason for ready state
+    # REQUIRED when state=ready AND opportunities is empty
+    ready_reason: str | None = None
+
+    # Cache information
+    cache_hit: bool = False
+    cache_key: str | None = None  # e.g., "today_board:v2:{brand_id}"
+    cache_ttl_seconds: int | None = None
+
+    # Generation status (legacy, preserved for backwards compat)
+    degraded: bool = False  # True if state in {"insufficient_evidence", "error"}
+    reason: str | None = None  # Degradation reason code
+    remediation: str | None = None  # User-facing action to fix degraded state
+
+    # Evidence quality indicators
+    evidence_shortfall: EvidenceShortfallDTO | None = None  # Present if degraded due to evidence
+
+    # Output stats
     total_candidates: int | None = None  # Raw count from graph before filtering
-    reason: str | None = None  # Degraded reason code if applicable
-    notes: list[str] = Field(default_factory=list)
     opportunity_count: int = 0
+    notes: list[str] = Field(default_factory=list)
+
+    # Timing (for observability)
+    wall_time_ms: int | None = None
+    evidence_fetch_ms: int | None = None
+    llm_synthesis_ms: int | None = None
+    llm_scoring_ms: int | None = None
+
+    # Legacy fields (kept for compatibility)
     dominant_pillar: str | None = None
     dominant_persona: str | None = None
     channel_mix: dict[str, int] = Field(default_factory=dict)
@@ -523,7 +600,23 @@ class RegenerateResponseDTO(BaseModel):
     """
     Response for POST /api/brands/{brand_id}/today/regenerate.
 
-    Returns the regenerated Today board.
+    PR0: Updated per opportunities_v1_prd.md §0.2.
+    POST /regenerate/ is the ONLY endpoint that triggers generation.
+    Returns 202 Accepted with job_id for async polling.
+
+    Client polls GET /today/ for completion.
+    """
+    status: Literal["accepted"] = "accepted"
+    job_id: str
+    poll_url: str  # "/api/brands/{brand_id}/today/"
+
+
+class RegenerateResponseLegacyDTO(BaseModel):
+    """
+    DEPRECATED: Legacy response for POST /api/brands/{brand_id}/today/regenerate.
+
+    Kept for backwards compatibility. Will be removed in v2.
+    New clients should use RegenerateResponseDTO.
     """
     status: str = "regenerated"
     today_board: TodayBoardDTO

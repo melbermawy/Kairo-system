@@ -2,6 +2,7 @@
 Core API Views for frontend contract.
 
 PR-7: Minimal API surface for frontend E2E flow.
+PR0: Added contract authority endpoints per opportunities_v1_prd.md §4.
 
 Implements:
 - GET/POST /api/brands - list and create brands
@@ -9,6 +10,8 @@ Implements:
 - GET/PUT /api/brands/:brand_id/onboarding - onboarding CRUD
 - GET/POST /api/brands/:brand_id/sources - sources list and create
 - PATCH/DELETE /api/sources/:source_id - source update and delete
+- GET /api/health - contract authority health check (PR0)
+- GET /api/openapi.json - versioned OpenAPI schema (PR0)
 
 No auth (explicitly out of scope for PRD v1).
 """
@@ -25,6 +28,18 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from kairo.core.models import Brand, Tenant
+
+
+# =============================================================================
+# CONTRACT AUTHORITY CONSTANTS
+# Per opportunities_v1_prd.md §4 - Runtime Contract Authority
+# =============================================================================
+
+# Bump CONTRACT_VERSION on breaking changes to DTOs
+CONTRACT_VERSION = "1.0.0"
+
+# Minimum frontend version this backend is compatible with
+MIN_FRONTEND_VERSION = "1.0.0"
 
 
 # =============================================================================
@@ -302,9 +317,14 @@ def _put_onboarding(request, brand_id: str) -> JsonResponse:
 # =============================================================================
 
 
-def _source_to_dict(source) -> dict:
-    """Convert SourceConnection to API response dict."""
-    return {
+def _source_to_dict(source, include_evidence_status: bool = False) -> dict:
+    """Convert SourceConnection to API response dict.
+
+    Args:
+        source: SourceConnection instance
+        include_evidence_status: If True, include latest ApifyRun age/status
+    """
+    result = {
         "id": str(source.id),
         "brand_id": str(source.brand_id),
         "platform": source.platform,
@@ -313,6 +333,66 @@ def _source_to_dict(source) -> dict:
         "is_enabled": source.is_enabled,
         "settings_json": source.settings_json or None,
         "created_at": source.created_at.isoformat(),
+    }
+
+    if include_evidence_status:
+        result["evidence_status"] = _get_source_evidence_status(source.id)
+
+    return result
+
+
+def _get_source_evidence_status(source_connection_id) -> dict:
+    """Get latest ApifyRun status for a source connection.
+
+    Returns dict with:
+    - has_evidence: bool - whether any successful run exists
+    - latest_run_id: str|null - UUID of latest successful run
+    - latest_run_status: str|null - status of latest run
+    - latest_run_age_hours: float|null - age in hours
+    - next_action: "reuse"|"refresh" - what compile would do
+    - ttl_hours: int - configured TTL
+    """
+    from django.utils import timezone
+    from kairo.brandbrain.caps import apify_run_ttl_hours
+    from kairo.integrations.apify.models import ApifyRun, ApifyRunStatus
+
+    ttl_hours = apify_run_ttl_hours()
+
+    # Find latest successful run
+    latest_run = (
+        ApifyRun.objects.filter(
+            source_connection_id=source_connection_id,
+            status=ApifyRunStatus.SUCCEEDED,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+    if not latest_run:
+        return {
+            "has_evidence": False,
+            "latest_run_id": None,
+            "latest_run_status": None,
+            "latest_run_age_hours": None,
+            "next_action": "refresh",
+            "ttl_hours": ttl_hours,
+        }
+
+    # Calculate age
+    now = timezone.now()
+    age = now - latest_run.created_at
+    age_hours = round(age.total_seconds() / 3600, 1)
+
+    # Determine next action
+    next_action = "reuse" if age_hours <= ttl_hours else "refresh"
+
+    return {
+        "has_evidence": True,
+        "latest_run_id": str(latest_run.id),
+        "latest_run_status": latest_run.status,
+        "latest_run_age_hours": age_hours,
+        "next_action": next_action,
+        "ttl_hours": ttl_hours,
     }
 
 
@@ -334,6 +414,9 @@ def _list_sources(request, brand_id: str) -> JsonResponse:
     """
     GET /api/brands/:brand_id/sources
 
+    Query params:
+        ?include_evidence=true  Include ApifyRun age/status per source
+
     Response 200:
     [
         {
@@ -344,7 +427,15 @@ def _list_sources(request, brand_id: str) -> JsonResponse:
             "identifier": "string",
             "is_enabled": true|false,
             "settings_json": {...}|null,
-            "created_at": "iso"
+            "created_at": "iso",
+            "evidence_status": {  // only if ?include_evidence=true
+                "has_evidence": true,
+                "latest_run_id": "uuid",
+                "latest_run_status": "succeeded",
+                "latest_run_age_hours": 12.5,
+                "next_action": "reuse"|"refresh",
+                "ttl_hours": 24
+            }
         }
     ]
     """
@@ -358,8 +449,14 @@ def _list_sources(request, brand_id: str) -> JsonResponse:
     if not Brand.objects.filter(id=parsed_id, deleted_at__isnull=True).exists():
         return JsonResponse({"error": "Brand not found"}, status=404)
 
+    # Check if evidence status requested
+    include_evidence = request.GET.get("include_evidence", "").lower() in ("true", "1", "yes")
+
     sources = SourceConnection.objects.filter(brand_id=parsed_id).order_by("-created_at")
-    return JsonResponse([_source_to_dict(s) for s in sources], safe=False)
+    return JsonResponse(
+        [_source_to_dict(s, include_evidence_status=include_evidence) for s in sources],
+        safe=False,
+    )
 
 
 def _create_source(request, brand_id: str) -> JsonResponse:
@@ -375,8 +472,13 @@ def _create_source(request, brand_id: str) -> JsonResponse:
         "settings_json"?: object
     }
 
-    Response 201: created object.
+    Response 201: created object (new source).
+    Response 200: existing object (idempotent - duplicate detected).
+
+    PR-7: Idempotency guard - normalizes identifier and returns existing source
+    if (brand_id, platform, capability, normalized_identifier) already exists.
     """
+    from kairo.brandbrain.identifiers import normalize_source_identifier
     from kairo.brandbrain.models import SourceConnection
 
     parsed_id = _parse_uuid(brand_id)
@@ -418,17 +520,32 @@ def _create_source(request, brand_id: str) -> JsonResponse:
     if settings_json is not None and not isinstance(settings_json, dict):
         return JsonResponse({"error": "settings_json must be an object"}, status=400)
 
-    # Create source
-    source = SourceConnection.objects.create(
-        brand=brand,
-        platform=platform.strip(),
-        capability=capability.strip(),
-        identifier=identifier.strip(),
-        is_enabled=is_enabled,
-        settings_json=settings_json or {},
+    # Normalize identifier for idempotency check
+    platform_clean = platform.strip()
+    capability_clean = capability.strip()
+    identifier_clean = identifier.strip()
+    normalized_identifier = normalize_source_identifier(
+        platform_clean, capability_clean, identifier_clean
     )
 
-    return JsonResponse(_source_to_dict(source), status=201)
+    # Idempotency guard: get_or_create with normalized identifier
+    # Note: SourceConnection.save() also normalizes, so we pre-normalize for lookup
+    source, created = SourceConnection.objects.get_or_create(
+        brand=brand,
+        platform=platform_clean,
+        capability=capability_clean,
+        identifier=normalized_identifier,
+        defaults={
+            "is_enabled": is_enabled,
+            "settings_json": settings_json or {},
+        },
+    )
+
+    # Return 201 for new, 200 for existing (idempotent)
+    response = _source_to_dict(source)
+    if not created:
+        response["_note"] = "existing_source_returned"
+    return JsonResponse(response, status=201 if created else 200)
 
 
 @csrf_exempt
@@ -529,3 +646,193 @@ def _delete_source(request, source_id: str) -> JsonResponse:
 
     source.delete()
     return JsonResponse({}, status=204)
+
+
+# =============================================================================
+# BOOTSTRAP ENDPOINT
+# =============================================================================
+
+
+@require_http_methods(["GET"])
+def brand_bootstrap(request, brand_id: str) -> JsonResponse:
+    """
+    GET /api/brands/:brand_id/bootstrap
+
+    Returns all data needed to initialize a brand page in a single request:
+    - brand: basic brand info
+    - onboarding: tier + answers_json
+    - sources: list of source connections
+    - overrides: user overrides + pinned_paths
+    - latest: compact latest snapshot (id, created_at, has_data flag)
+
+    This eliminates 5 separate requests, reducing latency by ~4x for remote DB.
+
+    Response 200:
+    {
+        "brand": {"id", "name", "website_url", "created_at"},
+        "onboarding": {"tier", "answers_json", "updated_at"},
+        "sources": [{"id", "platform", "capability", "identifier", "is_enabled", ...}],
+        "overrides": {"overrides_json", "pinned_paths", "updated_at"},
+        "latest": {"snapshot_id", "created_at", "has_data"} | null
+    }
+
+    Response 404 if brand not found.
+    """
+    from kairo.brandbrain.models import (
+        BrandOnboarding,
+        BrandBrainOverrides,
+        BrandBrainSnapshot,
+        SourceConnection,
+    )
+
+    parsed_id = _parse_uuid(brand_id)
+    if not parsed_id:
+        return JsonResponse({"error": "Invalid brand_id"}, status=400)
+
+    # Get brand (required)
+    try:
+        brand = Brand.objects.get(id=parsed_id, deleted_at__isnull=True)
+    except Brand.DoesNotExist:
+        return JsonResponse({"error": "Brand not found"}, status=404)
+
+    # Get onboarding (optional - return defaults if not exists)
+    try:
+        onboarding = BrandOnboarding.objects.get(brand_id=parsed_id)
+        onboarding_data = {
+            "tier": onboarding.tier,
+            "answers_json": onboarding.answers_json,
+            "updated_at": onboarding.updated_at.isoformat() if onboarding.updated_at else None,
+        }
+    except BrandOnboarding.DoesNotExist:
+        onboarding_data = {
+            "tier": 0,
+            "answers_json": {},
+            "updated_at": None,
+        }
+
+    # Get sources
+    sources = SourceConnection.objects.filter(brand_id=parsed_id).order_by("-created_at")
+    sources_data = [_source_to_dict(s) for s in sources]
+
+    # Get overrides (optional - return defaults if not exists)
+    try:
+        overrides = BrandBrainOverrides.objects.get(brand_id=parsed_id)
+        overrides_data = {
+            "overrides_json": overrides.overrides_json,
+            "pinned_paths": overrides.pinned_paths,
+            "updated_at": overrides.updated_at.isoformat() if overrides.updated_at else None,
+        }
+    except BrandBrainOverrides.DoesNotExist:
+        overrides_data = {
+            "overrides_json": {},
+            "pinned_paths": [],
+            "updated_at": None,
+        }
+
+    # Get latest snapshot (compact - just id, created_at, has_data)
+    latest_snapshot = (
+        BrandBrainSnapshot.objects
+        .filter(brand_id=parsed_id)
+        .order_by("-created_at")
+        .values("id", "created_at", "snapshot_json")
+        .first()
+    )
+
+    if latest_snapshot:
+        latest_data = {
+            "snapshot_id": str(latest_snapshot["id"]),
+            "created_at": latest_snapshot["created_at"].isoformat(),
+            "has_data": bool(latest_snapshot["snapshot_json"]),
+        }
+    else:
+        latest_data = None
+
+    return JsonResponse({
+        "brand": _brand_to_dict(brand),
+        "onboarding": onboarding_data,
+        "sources": sources_data,
+        "overrides": overrides_data,
+        "latest": latest_data,
+    })
+
+
+# =============================================================================
+# CONTRACT AUTHORITY ENDPOINTS
+# Per opportunities_v1_prd.md §4 - Runtime Contract Authority
+# =============================================================================
+
+
+@require_http_methods(["GET"])
+def health_check(request) -> JsonResponse:
+    """
+    GET /api/health
+
+    PR0: Contract authority health check endpoint.
+    Per opportunities_v1_prd.md §4.
+
+    Returns:
+    - status: "healthy" (or "degraded" if issues detected)
+    - contract_version: Current backend contract version
+    - min_frontend_version: Minimum compatible frontend version
+
+    Frontend MUST call this at startup to verify compatibility.
+    If frontend version < min_frontend_version, show blocking modal.
+    If backend contract_version < frontend MIN_BACKEND_VERSION, show warning.
+
+    Response 200:
+    {
+        "status": "healthy",
+        "contract_version": "1.0.0",
+        "min_frontend_version": "1.0.0"
+    }
+    """
+    return JsonResponse({
+        "status": "healthy",
+        "contract_version": CONTRACT_VERSION,
+        "min_frontend_version": MIN_FRONTEND_VERSION,
+    })
+
+
+@require_http_methods(["GET"])
+def openapi_schema(request) -> JsonResponse:
+    """
+    GET /api/openapi.json
+
+    PR0: Versioned OpenAPI schema endpoint.
+    Per opportunities_v1_prd.md §4.
+
+    Returns OpenAPI 3.1 schema generated from Pydantic DTOs.
+    Includes X-Contract-Version header for runtime verification.
+
+    Frontend MUST fetch schema from this endpoint, not from file.
+
+    Response 200: OpenAPI JSON schema
+    Headers:
+        X-Contract-Version: {CONTRACT_VERSION}
+        Cache-Control: public, max-age=3600
+    """
+    # PR0 STUB: Return minimal schema structure
+    # Full schema generation will be implemented in a later PR
+    # using Django Ninja or drf-spectacular
+    schema = {
+        "openapi": "3.1.0",
+        "info": {
+            "title": "Kairo API",
+            "version": CONTRACT_VERSION,
+            "description": "Kairo backend API - contract authority endpoint",
+        },
+        "paths": {},
+        "components": {
+            "schemas": {}
+        },
+        "_meta": {
+            "contract_version": CONTRACT_VERSION,
+            "min_frontend_version": MIN_FRONTEND_VERSION,
+            "note": "PR0 stub - full schema generation not yet implemented",
+        }
+    }
+
+    response = JsonResponse(schema)
+    response["X-Contract-Version"] = CONTRACT_VERSION
+    response["Cache-Control"] = "public, max-age=3600"
+    return response

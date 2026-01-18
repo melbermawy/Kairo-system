@@ -215,12 +215,16 @@ class TestTodayBoardEndpoints:
         assert isinstance(dto.opportunities, list)
         assert dto.meta is not None
 
-    def test_get_today_board_has_opportunities(self, client: Client, sample_brand_id: str):
-        """Today board returns stub opportunities."""
+    def test_get_today_board_returns_state(self, client: Client, sample_brand_id: str):
+        """PR0: Today board returns state machine state."""
         response = client.get(f"/api/brands/{sample_brand_id}/today/")
         data = response.json()
 
-        assert len(data["opportunities"]) > 0
+        # PR0: GET returns state-based response, not necessarily with opportunities
+        assert "meta" in data
+        assert "state" in data["meta"]
+        # New brand returns not_generated_yet state with empty opportunities
+        assert data["meta"]["state"] in ["not_generated_yet", "generating", "ready", "insufficient_evidence", "error"]
         assert data["meta"]["opportunity_count"] == len(data["opportunities"])
 
     def test_get_today_board_invalid_uuid_returns_400(self, client: Client):
@@ -242,24 +246,29 @@ class TestTodayBoardEndpoints:
         assert data["error"]["code"] == "not_found"
         assert "message" in data["error"]
 
-    def test_regenerate_today_board_returns_200(self, client: Client, sample_brand_id: str):
-        """POST /api/brands/{brand_id}/today/regenerate returns 200."""
+    def test_regenerate_today_board_returns_202(self, client: Client, sample_brand_id: str):
+        """PR0: POST /api/brands/{brand_id}/today/regenerate returns 202 Accepted."""
         response = client.post(f"/api/brands/{sample_brand_id}/today/regenerate/")
-        assert response.status_code == 200
+        assert response.status_code == 202
 
     def test_regenerate_today_board_validates_against_dto(
         self, client: Client, sample_brand_id: str
     ):
-        """POST /api/brands/{brand_id}/today/regenerate validates against RegenerateResponseDTO."""
+        """PR0: POST /api/brands/{brand_id}/today/regenerate validates against RegenerateResponseDTO."""
         response = client.post(f"/api/brands/{sample_brand_id}/today/regenerate/")
         data = response.json()
 
         # This should not raise
         dto = RegenerateResponseDTO.model_validate(data)
 
-        assert dto.status == "regenerated"
-        assert dto.today_board is not None
-        assert str(dto.today_board.brand_id) == sample_brand_id
+        assert dto.status == "accepted"
+        assert dto.job_id is not None
+        assert dto.poll_url is not None
+
+    def test_regenerate_today_board_legacy_returns_200(self, client: Client, sample_brand_id: str):
+        """LEGACY: POST /api/brands/{brand_id}/today/regenerate?legacy=true returns 200."""
+        response = client.post(f"/api/brands/{sample_brand_id}/today/regenerate/?legacy=true")
+        assert response.status_code == 200
 
     def test_regenerate_today_board_missing_brand_returns_404(self, client: Client, db):
         """POST /api/brands/{valid-but-missing}/today/regenerate returns 404."""

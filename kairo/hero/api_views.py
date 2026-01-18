@@ -22,6 +22,7 @@ from kairo.core.models import Brand
 from .dto import (
     DecisionRequestDTO,
     RegenerateResponseDTO,
+    RegenerateResponseLegacyDTO,
     VariantUpdateDTO,
 )
 from .services import (
@@ -88,9 +89,19 @@ def get_today_board(request: HttpRequest, brand_id: str) -> JsonResponse:
     """
     GET /api/brands/{brand_id}/today
 
-    Returns the Today board for a brand.
+    PR0: Updated to be STRICTLY READ-ONLY per opportunities_v1_prd.md §0.2.
 
-    Calls: today_service.get_today_board → opportunities_engine.generate_today_board
+    Returns the Today board for a brand with appropriate state:
+    - state: "ready" - Board available with opportunities
+    - state: "generating" - Background job is running
+    - state: "not_generated_yet" - No generation has ever run
+    - state: "insufficient_evidence" - Evidence quality gates failed
+    - state: "error" - Generation failed
+
+    CRITICAL: This endpoint MUST NOT call LLMs or block on generation.
+    The ONLY side effect allowed is first-run auto-enqueue (non-blocking).
+
+    Calls: today_service.get_today_board (read-only)
     """
     try:
         brand_uuid = UUID(brand_id)
@@ -120,10 +131,22 @@ def regenerate_today_board(request: HttpRequest, brand_id: str) -> JsonResponse:
     """
     POST /api/brands/{brand_id}/today/regenerate
 
-    Triggers regeneration of the Today board.
+    PR0: Updated per opportunities_v1_prd.md §0.2.
+    PR1: Legacy mode deprecated, will be removed.
 
-    Calls: today_service.regenerate_today_board → opportunities_engine.generate_today_board
+    This is the ONLY endpoint that triggers generation.
+
+    Returns 202 Accepted with job_id for async polling.
+    Client polls GET /today/ for completion.
+
+    Query params:
+        ?legacy=true  DEPRECATED - Returns error directing to async pattern
+
+    Calls: today_service.regenerate_today_board (enqueues job)
     """
+    import os
+    import warnings
+
     try:
         brand_uuid = UUID(brand_id)
     except ValueError:
@@ -133,8 +156,43 @@ def regenerate_today_board(request: HttpRequest, brand_id: str) -> JsonResponse:
             details={"field": "brand_id", "value": brand_id},
         )
 
+    # Check for legacy mode (DEPRECATED - PR1 kill switch)
+    use_legacy = request.GET.get("legacy", "").lower() in ("true", "1", "yes")
+
+    # PR1: Legacy kill switch - only allow in test mode
+    allow_legacy = os.environ.get("ALLOW_LEGACY_SYNC_GENERATION", "").lower() in ("true", "1")
+
     try:
-        today_board = today_service.regenerate_today_board(brand_uuid)
+        if use_legacy:
+            if not allow_legacy:
+                # PR1: Legacy mode is disabled - return error
+                return error_response(
+                    code="legacy_mode_disabled",
+                    message="Legacy synchronous generation is deprecated and disabled. "
+                            "Use async pattern: POST returns 202 with job_id, poll GET /today for completion.",
+                    status=410,  # Gone
+                    details={
+                        "migration_guide": "Remove ?legacy=true parameter. "
+                                           "Response will be 202 with job_id instead of full board.",
+                    },
+                )
+
+            # DEPRECATED: Synchronous generation (only allowed in test mode)
+            warnings.warn(
+                "Legacy synchronous generation is deprecated and will be removed.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            today_board = today_service.regenerate_today_board_legacy(brand_uuid)
+            dto = RegenerateResponseLegacyDTO(
+                status="regenerated",
+                today_board=today_board,
+            )
+            return JsonResponse(dto.model_dump(mode="json"))
+        else:
+            # New async pattern: enqueue job and return 202
+            dto = today_service.regenerate_today_board(brand_uuid)
+            return JsonResponse(dto.model_dump(mode="json"), status=202)
     except Brand.DoesNotExist:
         return error_response(
             code="not_found",
@@ -142,12 +200,6 @@ def regenerate_today_board(request: HttpRequest, brand_id: str) -> JsonResponse:
             status=404,
             details={"brand_id": brand_id},
         )
-
-    dto = RegenerateResponseDTO(
-        status="regenerated",
-        today_board=today_board,
-    )
-    return JsonResponse(dto.model_dump(mode="json"))
 
 
 # =============================================================================

@@ -7,9 +7,35 @@ Copy-paste runnable sequence for testing the full frontend flow locally.
 ## Prerequisites
 
 ```bash
-# Terminal 1: Ensure virtualenv and migrations
+# If .venv does NOT exist, create it first:
+python -m venv .venv
+
+# Activate (every terminal)
 source .venv/bin/activate
+
+# Install dependencies (first time only)
+pip install -U pip
+pip install -e ".[dev]"
+
+# Run migrations
 python manage.py migrate
+```
+
+---
+
+## Supabase Notes
+
+If using Supabase Postgres (recommended for production parity):
+
+1. **Direct host may be IPv6-only** - If `db.<ref>.supabase.co` doesn't resolve, use the pooler instead
+2. **Use pooler connection string** from Supabase Dashboard → Project Settings → Database → Connection pooler
+3. **Required params**: `sslmode=require`
+4. **Pooler username format**: `postgres.<project-ref>` (not just `postgres`)
+5. **Region must match** - Use the pooler host for your project's region (e.g., `aws-0-us-west-2`)
+
+Example `.env`:
+```
+DATABASE_URL=postgresql://postgres.<PROJECT_REF>:<PASSWORD>@aws-0-<REGION>.pooler.supabase.com:5432/postgres?sslmode=require
 ```
 
 ---
@@ -18,6 +44,7 @@ python manage.py migrate
 
 ```bash
 # Terminal 1: Django dev server
+source .venv/bin/activate
 python manage.py runserver 0.0.0.0:8000
 
 # Terminal 2: BrandBrain worker (required for compile jobs)
@@ -373,3 +400,6 @@ echo "=== SMOKE TEST PASSED ==="
 | Compile stuck in PENDING | Start worker: `python manage.py brandbrain_worker --poll-interval=2` |
 | CORS errors from frontend | Ensure `CORS_ALLOWED_ORIGINS` includes frontend URL |
 | 404 on /api/brands | Run `python manage.py migrate` |
+| `Tenant or user not found` | Wrong Supabase pooler region or credentials - copy exact string from dashboard |
+| `nodename nor servname provided` | Direct host IPv6-only, switch to pooler connection string |
+| `ModuleNotFoundError` | Run `pip install -e ".[dev]"` in activated venv |
