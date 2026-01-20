@@ -190,7 +190,24 @@ class Command(BaseCommand):
         4. If gates pass: mark SUCCEEDED (no synthesis yet)
         5. If gates fail: mark INSUFFICIENT_EVIDENCE
         """
+        from kairo.core.guardrails import is_apify_enabled
         from kairo.hero.tasks.generate import execute_opportunities_job
+
+        # TASK-2: Extract mode from job params (critical for live vs fixture routing)
+        job_params = job.params_json or {}
+        mode = job_params.get("mode", "fixture_only")
+
+        # TASK-2: JOB_START logging for observability
+        # This is the first checkpoint - if you don't see this, the worker isn't processing jobs
+        logger.info(
+            "JOB_START job_id=%s brand_id=%s mode=%s apify_enabled=%s force=%s first_run=%s",
+            job.id,
+            job.brand_id,
+            mode,
+            is_apify_enabled(),
+            job_params.get("force", False),
+            job_params.get("first_run", False),
+        )
 
         # Event to signal heartbeat thread to stop
         stop_heartbeat = threading.Event()
@@ -226,12 +243,14 @@ class Command(BaseCommand):
         heartbeat_thread.start()
 
         try:
-            self.stdout.write(f"  Executing evidence gates for brand {job.brand_id}...")
+            self.stdout.write(f"  Executing evidence gates for brand {job.brand_id} (mode={mode})...")
 
             # Run the generation task (PR1: gates only)
+            # TASK-2: Pass mode explicitly from job params
             result = execute_opportunities_job(
                 job_id=job.id,
                 brand_id=job.brand_id,
+                mode=mode,  # CRITICAL: Must pass mode from job params, not let it default
             )
 
             if result.success:

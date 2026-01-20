@@ -1,0 +1,114 @@
+Here's where I save some of my chatgpt responses so that I don't forget them.
+
+What’s still NOT locked (and blocks spec TOC v2)
+
+To write the real spec/PRD outline without hand-waving, we still need to lock:
+	1.	Opportunity card v1 fields (must-have vs nice-to-have, all evidence optional)
+	2.	Freshness model (per platform) + how we compute/display it
+	3.	Opportunity scoring language (even if simple v1)
+	4.	Source activation: how Apify inputs are built deterministically (what signals, what queries, what caps/limits)
+	5.	Page flow: Today → Opportunity detail → Concept builder page (you dislike drawers; so page-based)
+	6.	Persistence rules: concept belongs to brand+opportunity; allow multiple concepts per opportunity
+
+
+-----------------------
+
+
+Yep. You’re steering this correctly. Here’s the crisp clarification + the decision frame on “reuse vs ditch”.
+
+1) Correction: I mixed two pipelines. You’re right.
+
+When we talk source strategy / source activation for opportunities, the inputs are:
+	•	Brand context (from BrandBrain snapshot + brand config)
+	•	Platform scope (what sources are connected / enabled)
+	•	Opportunity types we want (trend / competitor / news / community)
+	•	Budget + freshness constraints
+
+Not “concept intent”. Concept intent starts after an opportunity exists and the user clicks Build Concept. That’s downstream.
+
+So: Opportunities pipeline = external world scan → candidate signals → score/filter → opportunity cards.
+Concept pipeline = opportunity + user inputs → concept object.
+
+2) Frontend prototype: keep visuals, throw away contracts
+
+Agree. The UI repo is a design reference, not a source of truth. We can reuse:
+	•	card layout patterns
+	•	interaction patterns (expand, detail view, CTA placement)
+	•	visual hierarchy
+
+We should NOT reuse:
+	•	any DTO assumptions
+	•	identifiers
+	•	evidence shape guesses
+	•	lifecycle fields unless we can actually produce them
+
+Backend owns reality.
+
+3) Performance stance (and your reminder)
+
+Also agree: “design for long work” is not a license for slow engineering.
+We do both:
+	•	Backend best practices (caps, caching, incrementalization, deterministic idempotency, bounded LLM calls)
+	•	UI states for unavoidable work (first run, regeneration, cache miss)
+
+And yes: same pattern should be applied to BrandBrain compile UI later.
+
+4) The big fork: ditch the existing opportunities engine or refactor it?
+
+Given the Phase 0 backend world model you pasted, we should reuse and refactor, not ditch.
+
+Why reuse (hard reasons, not vibes)
+
+The backend already has valuable primitives that are expensive to rebuild correctly:
+	•	persistence model + indexes
+	•	deterministic ids + update_or_create idempotency
+	•	scoring rubric + validation gates
+	•	dedupe
+	•	degraded mode fallback
+	•	DTO separation (DraftDTO vs DTO vs TodayBoardDTO)
+	•	engine/graph structure you can extend
+
+Throwing that away is how you regress into “AI slop hell” again.
+
+What we do ditch
+
+We ditch the product assumptions baked into it:
+	•	channel validation hardcoded to {linkedin, x} (that’s misaligned with your IG/TikTok-first strategy)
+	•	empty external signals bundle (must be wired)
+	•	any cringe B2B-ish prompting / output style
+	•	any DTO fields that are artifacts of the old vision
+
+So the correct posture is:
+
+Keep the skeleton. Replace the brain.
+
+Meaning: keep orchestration + storage + guardrails, replace:
+	•	external signal sourcing
+	•	prompt strategy
+	•	channel/type constraints
+	•	evidence tracking layer
+	•	freshness + cost policy
+
+5) Answer your last question directly
+
+are we completely ditching that? or recycle/reuse/refactor?
+
+Recycle + refactor the backend engine.
+Replace its source strategy and contracts.
+Discard LinkedIn-centric assumptions.
+Then re-connect frontend using a strict contract authority.
+
+6) Where we go next (since you chose source activation first)
+
+Next topic = Source activation strategy for opportunities.
+
+To make that discussion concrete (and avoid hand-waving), we need to lock three things:
+	1.	What sources exist at v1 (IG reels is core; what else is allowed)
+	2.	What “query inputs” each source needs (what does Apify need to run)
+	3.	What the minimal normalized evidence item is (so every source maps into one common shape)
+
+If you paste the Apify actor sample outputs (IG reels scraper first), we can do this without guessing and without wasting credits.
+
+
+---------------
+

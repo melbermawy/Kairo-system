@@ -124,6 +124,9 @@ def sample_opportunity(sample_uuid: UUID, sample_datetime: datetime) -> Opportun
         brand_id=sample_uuid,
         title="LinkedIn attribution debate",
         angle="Hot take on attribution models",
+        # PR-2/4b: Required fields
+        why_now="Attribution debates are trending in B2B marketing circles right now.",
+        evidence_ids=[sample_uuid, sample_uuid],
         type=OpportunityType.TREND,
         primary_channel=Channel.LINKEDIN,
         score=85,
@@ -277,6 +280,8 @@ class TestOpportunityDTO:
             brand_id=sample_uuid,
             title="Test",
             angle="Test angle",
+            why_now="Valid why now for testing score bounds validation.",
+            evidence_ids=[sample_uuid],
             type=OpportunityType.TREND,
             primary_channel=Channel.LINKEDIN,
             score=50,
@@ -292,6 +297,8 @@ class TestOpportunityDTO:
                 brand_id=sample_uuid,
                 title="Test",
                 angle="Test angle",
+                why_now="Valid why now for testing score bounds validation.",
+                evidence_ids=[sample_uuid],
                 type=OpportunityType.TREND,
                 primary_channel=Channel.LINKEDIN,
                 score=150,  # Invalid
@@ -306,6 +313,8 @@ class TestOpportunityDTO:
                 brand_id=sample_uuid,
                 title="Test",
                 angle="Test angle",
+                why_now="Valid why now for testing score bounds validation.",
+                evidence_ids=[sample_uuid],
                 type=OpportunityType.TREND,
                 primary_channel=Channel.LINKEDIN,
                 score=-10,  # Invalid
@@ -321,6 +330,8 @@ class TestOpportunityDTO:
                 brand_id=sample_uuid,
                 title="Test",
                 angle="Test angle",
+                why_now="Valid why now for testing enum validation.",
+                evidence_ids=[sample_uuid],
                 type="invalid_type",  # Invalid
                 primary_channel=Channel.LINKEDIN,
                 score=50,
@@ -787,27 +798,23 @@ class TestResponseWrappers:
     def test_regenerate_response_roundtrip(
         self, sample_uuid: UUID, sample_datetime: datetime, sample_brand_snapshot: BrandSnapshotDTO
     ):
-        """RegenerateResponseDTO serializes and deserializes correctly."""
-        today_board = TodayBoardDTO(
-            brand_id=sample_uuid,
-            snapshot=sample_brand_snapshot,
-            opportunities=[],
-            meta=TodayBoardMetaDTO(
-                generated_at=sample_datetime,
-                source="hero_f1",
-            ),
-        )
+        """RegenerateResponseDTO serializes and deserializes correctly.
 
+        PR0: Updated to async job pattern per opportunities_v1_prd.md §0.2.
+        POST /regenerate returns 202 Accepted with job_id for polling.
+        """
         response = RegenerateResponseDTO(
-            status="regenerated",
-            today_board=today_board,
+            status="accepted",
+            job_id=str(sample_uuid),
+            poll_url=f"/api/brands/{sample_uuid}/today/",
         )
 
         serialized = response.model_dump(mode="json")
         deserialized = RegenerateResponseDTO.model_validate(serialized)
 
-        assert deserialized.status == "regenerated"
-        assert deserialized.today_board.brand_id == sample_uuid
+        assert deserialized.status == "accepted"
+        assert deserialized.job_id == str(sample_uuid)
+        assert deserialized.poll_url == f"/api/brands/{sample_uuid}/today/"
 
     def test_create_package_response_roundtrip(self, sample_package: ContentPackageDTO):
         """CreatePackageResponseDTO serializes and deserializes correctly."""
@@ -941,6 +948,8 @@ class TestValidationErrors:
                 brand_id=sample_uuid,
                 # title is missing
                 angle="Test angle",
+                why_now="Valid why now for testing missing field validation.",
+                evidence_ids=[sample_uuid],
                 type=OpportunityType.TREND,
                 primary_channel=Channel.LINKEDIN,
                 score=50,

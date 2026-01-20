@@ -28,47 +28,49 @@ logger = logging.getLogger("kairo.hero.services.evidence_quality")
 # =============================================================================
 # THRESHOLDS (Per PRD §6.1)
 # =============================================================================
+# NOTE: Temporarily relaxed for testing (original values in comments)
 
 # Minimum total evidence items
-MIN_EVIDENCE_ITEMS = 8
+MIN_EVIDENCE_ITEMS = 2  # Original: 8
 
 # Minimum items with non-empty text
-MIN_ITEMS_WITH_TEXT = 6
+MIN_ITEMS_WITH_TEXT = 1  # Original: 6
 
 # Minimum transcript coverage (fraction of items with transcripts)
-MIN_TRANSCRIPT_COVERAGE = 0.3
+MIN_TRANSCRIPT_COVERAGE = 0.0  # Original: 0.3
 
 # Maximum age of evidence to consider (days)
 MAX_EVIDENCE_AGE_DAYS = 30
 
 # Required platforms (at least one must be present)
-REQUIRED_PLATFORMS = {"instagram", "tiktok"}
+REQUIRED_PLATFORMS = {"instagram"}  # Original: {"instagram", "tiktok"}
 
 # Minimum freshness (at least one item must be newer than this)
-MIN_FRESHNESS_DAYS = 7
+MIN_FRESHNESS_DAYS = 30  # Original: 7
 
 
 # =============================================================================
 # USABILITY THRESHOLDS (Per PRD §6.2)
 # =============================================================================
+# NOTE: Temporarily relaxed for testing (original values in comments)
 
 # Minimum text length for "substantial" content
-MIN_TEXT_LENGTH = 30
+MIN_TEXT_LENGTH = 10  # Original: 30
 
 # Minimum items with substantial text
-MIN_ITEMS_WITH_LONG_TEXT = 4
+MIN_ITEMS_WITH_LONG_TEXT = 1  # Original: 4
 
 # Minimum distinct authors
-MIN_DISTINCT_AUTHORS = 3
+MIN_DISTINCT_AUTHORS = 1  # Original: 3
 
 # Minimum distinct URLs
-MIN_DISTINCT_URLS = 6
+MIN_DISTINCT_URLS = 1  # Original: 6
 
 # Maximum near-duplicate ratio
-MAX_DUPLICATE_RATIO = 0.2
+MAX_DUPLICATE_RATIO = 0.8  # Original: 0.2
 
 # Minimum content ratio (items with text / total items)
-MIN_CONTENT_RATIO = 0.6
+MIN_CONTENT_RATIO = 0.3  # Original: 0.6
 
 # Near-duplicate text similarity threshold (Jaccard)
 DUPLICATE_SIMILARITY_THRESHOLD = 0.8

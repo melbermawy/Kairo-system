@@ -23,10 +23,65 @@ from uuid import uuid4
 
 import pytest
 
-from kairo.core.enums import TodayBoardState
+from unittest.mock import patch
+
+from kairo.core.enums import Channel, OpportunityType, TodayBoardState
 from kairo.core.models import Brand, Tenant
-from kairo.hero.dto import RegenerateResponseDTO, TodayBoardDTO
+from kairo.hero.dto import OpportunityDraftDTO, RegenerateResponseDTO, TodayBoardDTO
 from kairo.hero.services import today_service
+
+
+def _make_mock_evidence_bundle(brand_id):
+    """Create a mock evidence bundle for tests."""
+    from tests.fixtures.opportunity_factory import make_mock_evidence_bundle
+    return make_mock_evidence_bundle(brand_id)
+
+
+def _make_mock_drafts():
+    """Create mock opportunity drafts with required fields."""
+    return [
+        OpportunityDraftDTO(
+            proposed_title="PR1 Test Opportunity",
+            proposed_angle="Testing PR1 job completion and state transitions.",
+            type=OpportunityType.TREND,
+            primary_channel=Channel.LINKEDIN,
+            score=80.0,
+            why_now="Testing job execution pipeline produces correct state transitions.",
+        ),
+    ]
+
+
+@pytest.fixture(autouse=True)
+def mock_graph_and_evidence():
+    """
+    Auto-mock graph and evidence bundle for all tests.
+
+    PR-4c: Since PR-4b requires real OpportunitiesJob for evidence and
+    the graph requires LLM API keys, we mock these for all tests in this module.
+
+    PR-5: Also mock fetch_evidence_previews to return empty for non-existent IDs
+    since the test opportunities have evidence_ids that don't exist in the DB.
+
+    PR-6: Added mode parameter for live_cap_limited support.
+    """
+    def make_bundle(brand_id, run_id, mode="fixture_only"):
+        return _make_mock_evidence_bundle(brand_id)
+
+    def mock_fetch_previews(evidence_ids, *, strict=False):
+        # PR-5: Return empty list for tests since evidence_ids don't exist in DB
+        return []
+
+    with patch(
+        "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
+    ) as mock_graph, patch(
+        "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe",
+        side_effect=make_bundle,
+    ), patch(
+        "kairo.hero.services.evidence_query_service.fetch_evidence_previews",
+        side_effect=mock_fetch_previews,
+    ):
+        mock_graph.return_value = _make_mock_drafts()
+        yield
 
 
 # =============================================================================
@@ -367,7 +422,10 @@ class TestStateMachineTransitions:
         assert result.meta.state == TodayBoardState.GENERATING
 
     def test_job_completion_transitions_to_terminal_state(self, brand_with_sufficient_evidence):
-        """Job completion transitions to ready (or insufficient_evidence)."""
+        """Job completion transitions to ready (or insufficient_evidence).
+
+        PR-4c: Graph and evidence are auto-mocked via module-level fixture.
+        """
         from kairo.hero.models import OpportunitiesBoard, OpportunitiesJob
         from kairo.hero.tasks.generate import execute_opportunities_job
 
@@ -506,8 +564,13 @@ class TestNoFabrication:
         result = today_service.get_today_board(brand_with_insufficient_evidence.id)
         assert result.opportunities == []
 
-    def test_ready_state_has_zero_opportunities_in_pr1(self, brand_with_sufficient_evidence):
-        """PR1: Even ready state has 0 opportunities (no synthesis)."""
+    def test_ready_state_has_opportunities_from_synthesis(self, brand_with_sufficient_evidence):
+        """Post-PR1: Ready state has opportunities from synthesis.
+
+        PR-4c: Updated from "zero opportunities" to reflect current behavior.
+        After PR8, synthesis is enabled and opportunities are generated.
+        The mock graph returns drafts, so opportunities will be populated.
+        """
         from kairo.hero.models import OpportunitiesJob
         from kairo.hero.tasks.generate import execute_opportunities_job
 
@@ -524,10 +587,11 @@ class TestNoFabrication:
             brand_id=brand_with_sufficient_evidence.id,
         )
 
-        # GET should return ready with 0 opportunities (PR1 has no synthesis)
+        # GET should return ready with opportunities (post-PR8: synthesis is enabled)
         result = today_service.get_today_board(brand_with_sufficient_evidence.id)
         assert result.meta.state == TodayBoardState.READY
-        assert result.opportunities == []  # PR1: no synthesis yet
+        # Post-PR8: opportunities are generated via graph (mocked in tests)
+        assert len(result.opportunities) >= 1
 
 
 # =============================================================================

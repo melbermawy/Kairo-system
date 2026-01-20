@@ -135,29 +135,107 @@ class OpportunitiesBoard(models.Model):
         """
         Convert to TodayBoardDTO for API responses.
 
+        PR-5: Implements read-time join for evidence_preview.
+        Uses a single batched query to fetch all evidence previews.
+
         MUST be called with opportunities loaded separately.
         """
         from datetime import timezone
+        from uuid import UUID as UUIDType
 
         from kairo.core.models import Opportunity
         from kairo.hero.dto import (
             BrandSnapshotDTO,
+            EvidencePreviewDTO,
             EvidenceShortfallDTO,
             OpportunityDTO,
             TodayBoardDTO,
             TodayBoardMetaDTO,
         )
+        from kairo.hero.services.evidence_query_service import fetch_evidence_previews
 
         # Load opportunities by IDs
-        opportunities = []
+        opp_data_list = []  # Temporary storage for opportunity data before DTO creation
+        all_evidence_ids = []  # Collect all evidence IDs for batched fetch
+        evidence_ids_by_opp: dict[UUIDType, list[UUIDType]] = {}  # Track per-opportunity
+
         if self.opportunity_ids:
             opp_records = Opportunity.objects.filter(id__in=self.opportunity_ids)
-            opportunities = [
+            for opp in opp_records:
+                # PR-2: Read why_now and evidence_ids from metadata
+                metadata = opp.metadata or {}
+                why_now = metadata.get("why_now", "")
+
+                # PR-2: Invalid why_now in DB is an INVARIANT VIOLATION
+                # This should never happen if _persist_opportunities is working correctly.
+                # If it does, raise an error - do NOT silently return partial results.
+                if not why_now or len(why_now.strip()) < 10:
+                    raise ValueError(
+                        f"PR-2 invariant violation: Opportunity {opp.id} has invalid why_now "
+                        f"(length={len(why_now.strip()) if why_now else 0}). "
+                        "This indicates a persistence bug - opportunities without valid why_now "
+                        "should not be in the database."
+                    )
+
+                # PR-2/5: Parse evidence_ids from metadata
+                evidence_ids_raw = metadata.get("evidence_ids", [])
+                evidence_ids = []
+                for eid in evidence_ids_raw:
+                    try:
+                        evidence_ids.append(UUIDType(str(eid)))
+                    except (ValueError, TypeError):
+                        pass  # Skip invalid UUIDs (not critical)
+
+                # Collect evidence IDs for batched fetch (PR-5)
+                evidence_ids_by_opp[opp.id] = evidence_ids
+                all_evidence_ids.extend(evidence_ids)
+
+                opp_data_list.append({
+                    "record": opp,
+                    "why_now": why_now.strip(),
+                    "evidence_ids": evidence_ids,
+                })
+
+        # PR-5: Batch fetch all evidence previews in a SINGLE query
+        # Deduplicate but preserve ordering information
+        unique_evidence_ids = list(dict.fromkeys(all_evidence_ids))
+        evidence_previews_list = fetch_evidence_previews(
+            unique_evidence_ids,
+            strict=True,  # PR-5: Raise ValueError on missing IDs
+        )
+
+        # Build preview lookup dict
+        preview_by_id: dict[UUIDType, EvidencePreviewDTO] = {}
+        for preview in evidence_previews_list:
+            preview_by_id[preview.id] = EvidencePreviewDTO(
+                id=preview.id,
+                platform=preview.platform,
+                canonical_url=preview.canonical_url,
+                author_ref=preview.author_ref,
+                text_snippet=preview.text_snippet,
+                has_transcript=preview.has_transcript,
+            )
+
+        # Build opportunity DTOs with evidence previews
+        opportunities = []
+        for opp_data in opp_data_list:
+            opp = opp_data["record"]
+            evidence_ids = opp_data["evidence_ids"]
+
+            # Map evidence_ids to previews in order (PR-5: stable ordering)
+            evidence_preview = [
+                preview_by_id[eid]
+                for eid in evidence_ids
+                if eid in preview_by_id
+            ]
+
+            opportunities.append(
                 OpportunityDTO(
                     id=opp.id,
                     brand_id=opp.brand_id,
                     title=opp.title,
                     angle=opp.angle,
+                    why_now=opp_data["why_now"],  # PR-2: Required field
                     type=opp.type,
                     primary_channel=opp.primary_channel,
                     score=opp.score or 0.0,
@@ -167,6 +245,8 @@ class OpportunitiesBoard(models.Model):
                     persona_id=opp.persona_id,
                     pillar_id=opp.pillar_id,
                     suggested_channels=opp.suggested_channels or [],
+                    evidence_ids=evidence_ids,  # PR-2: Forward-compat field
+                    evidence_preview=evidence_preview,  # PR-5: Read-time join
                     is_pinned=opp.is_pinned,
                     is_snoozed=opp.is_snoozed,
                     snoozed_until=opp.snoozed_until,
@@ -174,8 +254,7 @@ class OpportunitiesBoard(models.Model):
                     created_at=opp.created_at,
                     updated_at=opp.updated_at,
                 )
-                for opp in opp_records
-            ]
+            )
 
         # Build minimal snapshot
         brand = self.brand

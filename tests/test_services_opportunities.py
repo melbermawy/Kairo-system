@@ -54,6 +54,10 @@ def opportunity(db, brand):
         primary_channel=Channel.LINKEDIN,
         score=80.0,
         created_via=CreatedVia.AI_SUGGESTED,
+        metadata={
+            "why_now": "Current market trends show high engagement with this topic. Testing service functionality.",
+            "evidence_ids": [],
+        },
     )
 
 
@@ -213,6 +217,10 @@ class TestCreatePackageForOpportunity:
             primary_channel=Channel.LINKEDIN,
             score=80.0,
             created_via=CreatedVia.AI_SUGGESTED,
+            metadata={
+                "why_now": "First opportunity testing why_now field is required for package creation.",
+                "evidence_ids": [],
+            },
         )
         opp2 = Opportunity.objects.create(
             brand=brand,
@@ -222,6 +230,10 @@ class TestCreatePackageForOpportunity:
             primary_channel=Channel.X,
             score=75.0,
             created_via=CreatedVia.AI_SUGGESTED,
+            metadata={
+                "why_now": "Second opportunity testing why_now field is required for package creation.",
+                "evidence_ids": [],
+            },
         )
 
         with patch("kairo.hero.engines.content_engine.graph_hero_package_from_opportunity") as mock_graph:

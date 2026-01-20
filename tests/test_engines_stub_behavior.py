@@ -174,20 +174,32 @@ def mock_opportunity_drafts():
 # =============================================================================
 
 
+def _make_mock_evidence_bundle(brand_id):
+    """Create a mock evidence bundle for tests."""
+    from tests.fixtures.opportunity_factory import make_mock_evidence_bundle
+    return make_mock_evidence_bundle(brand_id)
+
+
 @pytest.mark.django_db
 class TestOpportunitiesEngine:
     """Tests for opportunities_engine.generate_today_board.
 
     PR-8 update: These tests now patch the graph to return mock data,
     since the engine now calls the graph instead of generating stubs inline.
+
+    PR-4c update: Tests now also mock _get_evidence_bundle_safe to provide
+    evidence bundle, since PR-4b requires real OpportunitiesJob for evidence.
     """
 
     def test_returns_today_board_dto(self, brand, mock_opportunity_drafts):
         """Engine returns a valid TodayBoardDTO."""
         with patch(
             "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
-        ) as mock_graph:
+        ) as mock_graph, patch(
+            "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe"
+        ) as mock_evidence:
             mock_graph.return_value = mock_opportunity_drafts
+            mock_evidence.return_value = _make_mock_evidence_bundle(brand.id)
 
             result = opportunities_engine.generate_today_board(brand.id)
 
@@ -199,8 +211,11 @@ class TestOpportunitiesEngine:
         """Returned board has correct brand_id."""
         with patch(
             "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
-        ) as mock_graph:
+        ) as mock_graph, patch(
+            "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe"
+        ) as mock_evidence:
             mock_graph.return_value = mock_opportunity_drafts
+            mock_evidence.return_value = _make_mock_evidence_bundle(brand.id)
 
             result = opportunities_engine.generate_today_board(brand.id)
 
@@ -210,8 +225,11 @@ class TestOpportunitiesEngine:
         """Snapshot contains actual brand data."""
         with patch(
             "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
-        ) as mock_graph:
+        ) as mock_graph, patch(
+            "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe"
+        ) as mock_evidence:
             mock_graph.return_value = mock_opportunity_drafts
+            mock_evidence.return_value = _make_mock_evidence_bundle(brand.id)
 
             result = opportunities_engine.generate_today_board(brand.id)
 
@@ -225,8 +243,11 @@ class TestOpportunitiesEngine:
         """Board has 6-10 opportunities per PR-3 spec."""
         with patch(
             "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
-        ) as mock_graph:
+        ) as mock_graph, patch(
+            "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe"
+        ) as mock_evidence:
             mock_graph.return_value = mock_opportunity_drafts
+            mock_evidence.return_value = _make_mock_evidence_bundle(brand.id)
 
             result = opportunities_engine.generate_today_board(brand.id)
 
@@ -236,8 +257,11 @@ class TestOpportunitiesEngine:
         """All opportunity scores are in [0, 100]."""
         with patch(
             "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
-        ) as mock_graph:
+        ) as mock_graph, patch(
+            "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe"
+        ) as mock_evidence:
             mock_graph.return_value = mock_opportunity_drafts
+            mock_evidence.return_value = _make_mock_evidence_bundle(brand.id)
 
             result = opportunities_engine.generate_today_board(brand.id)
 
@@ -248,8 +272,11 @@ class TestOpportunitiesEngine:
         """Stub scores are in [60, 95] range per spec."""
         with patch(
             "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
-        ) as mock_graph:
+        ) as mock_graph, patch(
+            "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe"
+        ) as mock_evidence:
             mock_graph.return_value = mock_opportunity_drafts
+            mock_evidence.return_value = _make_mock_evidence_bundle(brand.id)
 
             result = opportunities_engine.generate_today_board(brand.id)
 
@@ -260,8 +287,11 @@ class TestOpportunitiesEngine:
         """All opportunities have valid primary channels."""
         with patch(
             "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
-        ) as mock_graph:
+        ) as mock_graph, patch(
+            "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe"
+        ) as mock_evidence:
             mock_graph.return_value = mock_opportunity_drafts
+            mock_evidence.return_value = _make_mock_evidence_bundle(brand.id)
 
             result = opportunities_engine.generate_today_board(brand.id)
 
@@ -275,8 +305,11 @@ class TestOpportunitiesEngine:
         """Opportunities are sorted by score descending."""
         with patch(
             "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
-        ) as mock_graph:
+        ) as mock_graph, patch(
+            "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe"
+        ) as mock_evidence:
             mock_graph.return_value = mock_opportunity_drafts
+            mock_evidence.return_value = _make_mock_evidence_bundle(brand.id)
 
             result = opportunities_engine.generate_today_board(brand.id)
 
@@ -287,8 +320,11 @@ class TestOpportunitiesEngine:
         """All opportunities have valid types."""
         with patch(
             "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
-        ) as mock_graph:
+        ) as mock_graph, patch(
+            "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe"
+        ) as mock_evidence:
             mock_graph.return_value = mock_opportunity_drafts
+            mock_evidence.return_value = _make_mock_evidence_bundle(brand.id)
 
             result = opportunities_engine.generate_today_board(brand.id)
 
@@ -299,8 +335,11 @@ class TestOpportunitiesEngine:
         """Meta opportunity_count matches actual count."""
         with patch(
             "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
-        ) as mock_graph:
+        ) as mock_graph, patch(
+            "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe"
+        ) as mock_evidence:
             mock_graph.return_value = mock_opportunity_drafts
+            mock_evidence.return_value = _make_mock_evidence_bundle(brand.id)
 
             result = opportunities_engine.generate_today_board(brand.id)
 
@@ -310,8 +349,11 @@ class TestOpportunitiesEngine:
         """Meta has non-empty channel_mix."""
         with patch(
             "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
-        ) as mock_graph:
+        ) as mock_graph, patch(
+            "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe"
+        ) as mock_evidence:
             mock_graph.return_value = mock_opportunity_drafts
+            mock_evidence.return_value = _make_mock_evidence_bundle(brand.id)
 
             result = opportunities_engine.generate_today_board(brand.id)
 
@@ -321,8 +363,11 @@ class TestOpportunitiesEngine:
         """Meta source is 'hero_f1'."""
         with patch(
             "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
-        ) as mock_graph:
+        ) as mock_graph, patch(
+            "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe"
+        ) as mock_evidence:
             mock_graph.return_value = mock_opportunity_drafts
+            mock_evidence.return_value = _make_mock_evidence_bundle(brand.id)
 
             result = opportunities_engine.generate_today_board(brand.id)
 
@@ -332,8 +377,11 @@ class TestOpportunitiesEngine:
         """Meta degraded is False for successful generation."""
         with patch(
             "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
-        ) as mock_graph:
+        ) as mock_graph, patch(
+            "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe"
+        ) as mock_evidence:
             mock_graph.return_value = mock_opportunity_drafts
+            mock_evidence.return_value = _make_mock_evidence_bundle(brand.id)
 
             result = opportunities_engine.generate_today_board(brand.id)
 
@@ -350,8 +398,11 @@ class TestOpportunitiesEngine:
         """Same brand ID produces consistent output structure (via idempotent IDs)."""
         with patch(
             "kairo.hero.engines.opportunities_engine.graph_hero_generate_opportunities"
-        ) as mock_graph:
+        ) as mock_graph, patch(
+            "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe"
+        ) as mock_evidence:
             mock_graph.return_value = mock_opportunity_drafts
+            mock_evidence.return_value = _make_mock_evidence_bundle(brand.id)
 
             result1 = opportunities_engine.generate_today_board(brand.id)
             result2 = opportunities_engine.generate_today_board(brand.id)
@@ -375,7 +426,10 @@ class TestOpportunitiesEngine:
 
 @pytest.fixture
 def opportunity(brand):
-    """Create a test opportunity for package tests."""
+    """Create a test opportunity for package tests.
+
+    PR-4c: Updated to include required metadata fields (why_now, evidence_ids).
+    """
     from kairo.core.models import Opportunity
     from kairo.core.enums import OpportunityType, CreatedVia
 
@@ -387,6 +441,10 @@ def opportunity(brand):
         primary_channel=Channel.LINKEDIN,
         score=80.0,
         created_via=CreatedVia.AI_SUGGESTED,
+        metadata={
+            "why_now": "Market trends show high engagement with this topic area, making it timely.",
+            "evidence_ids": [str(uuid4()), str(uuid4())],
+        },
     )
 
 

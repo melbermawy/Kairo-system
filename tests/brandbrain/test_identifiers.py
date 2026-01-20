@@ -2,6 +2,7 @@
 Unit tests for identifier normalization.
 
 PR-1: Tests for normalize_source_identifier() helper.
+PR-7: Enhanced normalization - extracts handles from URLs, strips tracking params.
 All tests marked @pytest.mark.unit - no DB required.
 """
 
@@ -38,19 +39,26 @@ class TestNormalizeSourceIdentifier:
     # =========================================================================
 
     def test_strips_trailing_slash_from_url(self):
-        """Should strip trailing slash from URLs."""
+        """Should strip trailing slash from URLs.
+
+        PR-7: Instagram URLs are extracted to just the username.
+        """
         result = normalize_source_identifier(
             "instagram", "posts", "https://instagram.com/handle/"
         )
-        assert result == "https://instagram.com/handle"
+        # PR-7: Extracts username from Instagram URL
+        assert result == "handle"
 
     def test_lowercases_url_host_only(self):
-        """Should lowercase URL scheme and host, but NOT path."""
+        """Should lowercase URL scheme and host, but NOT path.
+
+        PR-7: Instagram URLs are extracted to just the username (lowercased).
+        """
         result = normalize_source_identifier(
             "instagram", "posts", "HTTPS://INSTAGRAM.COM/Handle"
         )
-        # Host is lowercased, path case preserved
-        assert result == "https://instagram.com/Handle"
+        # PR-7: Extracts username from Instagram URL, lowercased
+        assert result == "handle"
 
     def test_preserves_url_path_case(self):
         """Should preserve case in URL path."""
@@ -60,12 +68,15 @@ class TestNormalizeSourceIdentifier:
         assert result == "https://example.com/About/Team"
 
     def test_www_not_stripped_from_general_urls(self):
-        """www should NOT be stripped from general URLs (conservative)."""
+        """www should NOT be stripped from general URLs (conservative).
+
+        PR-7: Instagram URLs are extracted to just the username.
+        """
         result = normalize_source_identifier(
             "instagram", "posts", "https://www.instagram.com/handle"
         )
-        # www is preserved for non-linkedin URLs
-        assert result == "https://www.instagram.com/handle"
+        # PR-7: Extracts username from Instagram URL regardless of www
+        assert result == "handle"
 
     # =========================================================================
     # URL normalization - query string preservation
@@ -85,12 +96,13 @@ class TestNormalizeSourceIdentifier:
         )
         assert "Filter=Active" in result
 
-    def test_fragment_preserved(self):
-        """URL fragment should be preserved."""
+    def test_fragment_stripped_for_web(self):
+        """URL fragment should be stripped (PR-7: fragments don't affect page content)."""
         result = normalize_source_identifier(
             "web", "crawl_pages", "https://example.com/page#Section1"
         )
-        assert result == "https://example.com/page#Section1"
+        # PR-7: Fragments are stripped as they don't change page content
+        assert result == "https://example.com/page"
 
     def test_trailing_slash_stripped_before_query(self):
         """Trailing slash in path should be stripped even with query."""
@@ -172,15 +184,15 @@ class TestNormalizeSourceIdentifier:
     # YouTube normalization
     # =========================================================================
 
-    def test_youtube_channel_url_trailing_slash(self):
-        """Should strip trailing slash from YouTube URLs."""
+    def test_youtube_channel_url_extracts_channel_id(self):
+        """Should extract channel ID from YouTube URLs (PR-7)."""
         result = normalize_source_identifier(
             "youtube",
             "channel_videos",
             "https://www.youtube.com/channel/UC123abc/",
         )
-        # www preserved, trailing slash stripped
-        assert result == "https://www.youtube.com/channel/UC123abc"
+        # PR-7: Extracts channel ID from YouTube URL
+        assert result == "UC123abc"
 
     def test_youtube_preserves_path_case(self):
         """YouTube channel IDs should preserve case."""
@@ -210,12 +222,12 @@ class TestNormalizeSourceIdentifier:
         )
         assert result == "https://example.com:8080/page"
 
-    def test_complex_url_all_parts_preserved(self):
-        """Complex URL should preserve path case, query, and fragment."""
+    def test_complex_url_all_parts_preserved_except_fragment(self):
+        """Complex URL should preserve path case and query, but strip fragment (PR-7)."""
         result = normalize_source_identifier(
             "web",
             "crawl_pages",
             "https://Example.COM/Path/To/Page?key=Value&other=123#Section",
         )
-        # Host lowercased, everything else preserved
-        assert result == "https://example.com/Path/To/Page?key=Value&other=123#Section"
+        # Host lowercased, path and query preserved, fragment stripped (PR-7)
+        assert result == "https://example.com/Path/To/Page?key=Value&other=123"

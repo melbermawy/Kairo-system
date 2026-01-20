@@ -70,6 +70,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "kairo.middleware.timing.RequestTimingMiddleware",  # PR-7: API request timing
+    "kairo.middleware.get_today_sentinel.GetTodaySentinelMiddleware",  # PR-0: GET context sentinel
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -305,6 +306,37 @@ APIFY_BASE_URL = os.environ.get("APIFY_BASE_URL", "https://api.apify.com")
 
 
 # =============================================================================
+# OPPORTUNITIES v2 GUARDRAILS (PR-0)
+# Per opportunities_v1_prd.md Section I.1 (PR-0 Baseline + Guardrails)
+# =============================================================================
+# These flags enforce PRD invariants and prevent accidental spend/violations.
+
+# APIFY_ENABLED: Global kill switch for all Apify API calls.
+# Default: false. Any Apify call raises ApifyDisabledError unless explicitly enabled.
+# Only POST /regenerate/ path should enable this in production.
+APIFY_ENABLED = os.environ.get("APIFY_ENABLED", "false").lower() in ("true", "1", "yes")
+
+# SOURCEACTIVATION_MODE_DEFAULT: Default mode for SourceActivation.
+# "fixture_only" - Load pre-recorded fixtures, no Apify calls (safe default)
+# "live_cap_limited" - Execute real Apify calls with budget caps
+# Per PRD Section G.3: fixture_only is mandatory for CI and default for onboarding.
+SOURCEACTIVATION_MODE_DEFAULT = os.environ.get("SOURCEACTIVATION_MODE_DEFAULT", "fixture_only")
+
+# TODAY_GET_READ_ONLY: Sentinel for GET /today/ behavior.
+# When true, GET /today/ must be strictly read-only (no inline LLM, no Apify).
+# This flag is for test-time detection; actual enforcement is in PR-1.
+TODAY_GET_READ_ONLY = os.environ.get("TODAY_GET_READ_ONLY", "true").lower() in ("true", "1", "yes")
+
+# ALLOW_FIXTURE_FALLBACK: Whether to allow fixture fallback when live mode fails.
+# Default: true for dev (graceful degradation), false for live testing.
+# When false and mode=live_cap_limited:
+# - If Apify returns 0 items → insufficient_evidence (no fixture rescue)
+# - If gates fail → insufficient_evidence with real shortfall data
+# This ensures we get real feedback about evidence quality, not demo data.
+ALLOW_FIXTURE_FALLBACK = os.environ.get("ALLOW_FIXTURE_FALLBACK", "true").lower() in ("true", "1", "yes")
+
+
+# =============================================================================
 # PRD-1: OUT OF SCOPE FOR PR-0
 # =============================================================================
 # The following will be added in later PRs:
@@ -318,3 +350,44 @@ APIFY_BASE_URL = os.environ.get("APIFY_BASE_URL", "https://api.apify.com")
 # PR-6: Observability + Run IDs
 # - INCLUDE_RUN_ID_IN_LOGS = os.environ.get("INCLUDE_RUN_ID_IN_LOGS", "True")
 # - SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+
+
+# =============================================================================
+# CACHE CONFIGURATION (PR-7)
+# Per opportunities_v1_prd.md §D.4 - TodayBoard Caching
+# =============================================================================
+# Cache backend: Redis in production, LocMem for tests/local dev
+# Cache key: "today_board:v2:{brand_id}"
+# TTL: 6 hours (21600 seconds)
+# Invalidation: On job completion or POST /regenerate/
+
+REDIS_URL = os.environ.get("REDIS_URL", "")
+
+if REDIS_URL:
+    # Production: Use Redis
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+            "OPTIONS": {
+                "socket_connect_timeout": 5,
+                "socket_timeout": 5,
+            },
+            "KEY_PREFIX": "kairo",
+        }
+    }
+else:
+    # Development/Test: Use in-memory cache (sufficient for single-process dev)
+    # For tests, this provides deterministic behavior without Redis dependency
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "unique-snowflake",
+            "OPTIONS": {
+                "MAX_ENTRIES": 1000,
+            },
+        }
+    }
+
+# PR-7: TodayBoard cache TTL (default 6 hours per PRD §D.4)
+OPPORTUNITIES_CACHE_TTL_S = int(os.environ.get("OPPORTUNITIES_CACHE_TTL_S", "21600"))

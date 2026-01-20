@@ -2,6 +2,8 @@
 Opportunities Engine.
 
 PR-8: Opportunities Graph Wired via Opportunities Engine (F1).
+PR-4: SourceActivation integration (fixture-only mode).
+PR-4b: Strict PRD compliance - EvidenceBundle replaces external signals (no merge).
 
 Manages opportunity lifecycle:
 - Generation of Today board (via graph)
@@ -15,6 +17,11 @@ Key responsibilities (per 05-llm-and-deepagents-conventions.md):
 - Engine owns all DB writes
 - Graph returns DTOs only; engine converts to ORM and persists
 - Engine handles failure modes and returns degraded board on graph failure
+
+PR-4/4b: SourceActivation replaces external signals:
+- PRD §C.1: BrandBrainSnapshot -> SeedPack -> EvidenceBundle -> signals
+- No merging with legacy signals - pure replacement per PRD intent
+- evidence_ids required (>= 1) for READY opportunities
 """
 
 import logging
@@ -38,6 +45,11 @@ from kairo.hero.dto import (
 )
 from kairo.hero.engines import learning_engine
 from kairo.hero.graphs.opportunities_graph import GraphError, graph_hero_generate_opportunities
+from kairo.hero.graphs.synthesis_pipeline import (
+    run_synthesis_pipeline,
+    PipelineTimings,
+    MIN_READY_OPPS,
+)
 from kairo.hero.observability_store import (
     classify_f1_run,
     log_classification,
@@ -45,12 +57,19 @@ from kairo.hero.observability_store import (
     log_run_fail,
     log_run_start,
 )
-from kairo.hero.services import external_signals_service
+# PR-4b: external_signals_service import kept for legacy but NOT used in new path
+# Per PRD §B.0.3: "external_signals" as upstream concept is deprecated
+# from kairo.hero.services import external_signals_service  # DEPRECATED - do not use in new path
 
 logger = logging.getLogger("kairo.hero.engines.opportunities")
 
 # Namespace UUID for deterministic opportunity ID generation
 OPPORTUNITY_NAMESPACE = UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+
+# Feature flag: Use new multi-stage synthesis pipeline instead of monolithic graph
+# Set KAIRO_USE_SYNTHESIS_PIPELINE=true to enable (default: true for performance)
+import os
+USE_SYNTHESIS_PIPELINE = os.getenv("KAIRO_USE_SYNTHESIS_PIPELINE", "true").lower() in ("true", "1", "yes")
 
 
 class GenerationResult(NamedTuple):
@@ -66,6 +85,8 @@ def generate_today_board(
     brand_id: UUID,
     run_id: UUID | None = None,
     trigger_source: str = "api",
+    mode: str = "fixture_only",
+    evidence_bundle=None,  # PERF: Pre-fetched bundle to avoid duplicate SourceActivation
 ) -> TodayBoardDTO:
     """
     Generate the Today board for a brand.
@@ -73,27 +94,43 @@ def generate_today_board(
     PR-8 implementation:
     1. Build BrandSnapshotDTO from Brand + Persona + ContentPillar
     2. Obtain LearningSummaryDTO via learning_engine
-    3. Fetch ExternalSignalBundleDTO via external_signals_service
-    4. Call graph_hero_generate_opportunities
-    5. Persist Opportunity rows (replace previous run's opportunities)
-    6. Return TodayBoardDTO computed from persisted data
+    3. Call graph_hero_generate_opportunities
+    4. Persist Opportunity rows (replace previous run's opportunities)
+    5. Return TodayBoardDTO computed from persisted data
+
+    PR-4b: SourceActivation REPLACES external signals (per PRD §C.1):
+    1. Derive SeedPack from brand (BrandBrainSnapshot)
+    2. Execute SourceActivation (fixture-only mode) -> EvidenceBundle
+    3. Convert EvidenceBundle to signals via convert_evidence_bundle_to_signals()
+    4. Pass signals to graph (NO MERGE with legacy signals)
+    5. Propagate evidence_ids to persisted opportunities (>= 1 for READY)
 
     Failure modes (per PRD):
     - Graph failure: Log failure, return degraded board with existing or empty opportunities
-    - External signals failure: Use empty bundle and continue
+    - SourceActivation failure: Return degraded/insufficient_evidence board
     - Learning summary failure: Use default summary and continue
+
+    CRITICAL (PR-1): This function runs LLM synthesis and MUST NOT be called
+    from GET /today context. Use background jobs for generation.
 
     Args:
         brand_id: UUID of the brand
         run_id: Optional run ID for correlation (auto-generated if None)
         trigger_source: Trigger source for observability
+        mode: SourceActivation mode ("fixture_only" or "live_cap_limited")
 
     Returns:
         TodayBoardDTO with opportunities
 
     Raises:
         Brand.DoesNotExist: If brand not found
+        GuardrailViolationError: If called from GET /today context (PR-1 invariant)
     """
+    # PR-1: Guard against calling from GET /today context
+    # Per PRD Section G.2 INV-G1: GET /today/ never directly executes LLM synthesis
+    from kairo.core.guardrails import assert_not_in_get_today, get_sourceactivation_mode
+    assert_not_in_get_today()
+
     # Generate run_id if not provided
     if run_id is None:
         run_id = uuid4()
@@ -124,20 +161,71 @@ def generate_today_board(
     # Fetch learning summary (with fallback)
     learning_summary = _get_learning_summary_safe(brand_id, run_id)
 
-    # Fetch external signals (with fallback)
-    external_signals = _get_external_signals_safe(brand_id, run_id)
+    # PR-4b/PR-6: Execute SourceActivation - this REPLACES external signals (per PRD §C.1)
+    # Sequence: BrandBrainSnapshot -> SeedPack -> EvidenceBundle -> signals
+    # PR-6: Mode determines fixture_only vs live_cap_limited execution
+    # PERF: Skip SourceActivation if evidence_bundle was pre-fetched by caller (e.g., from task)
+    if evidence_bundle is None:
+        evidence_bundle = _get_evidence_bundle_safe(brand_id, run_id, mode=mode)
+    else:
+        logger.info(
+            "Using pre-fetched evidence_bundle (skipping duplicate SourceActivation)",
+            extra={
+                "run_id": str(run_id),
+                "brand_id": str(brand_id),
+                "items_count": len(evidence_bundle.items) if evidence_bundle.items else 0,
+            },
+        )
+    selected_evidence_ids: list[UUID] = []
 
-    # Call graph to generate opportunities
+    # PR-4b: Signals come exclusively from EvidenceBundle (no merge with legacy)
+    signals = _convert_evidence_to_signals(brand_id, run_id, evidence_bundle)
+
+    if evidence_bundle and evidence_bundle.items:
+        # Select evidence for opportunities
+        from kairo.sourceactivation.adapters import select_evidence_for_opportunity
+        selected_evidence_ids = select_evidence_for_opportunity(evidence_bundle, max_items=3)
+
+        logger.info(
+            "SourceActivation completed: %d items, %d selected for opportunities",
+            len(evidence_bundle.items),
+            len(selected_evidence_ids),
+            extra={
+                "run_id": str(run_id),
+                "brand_id": str(brand_id),
+                "activation_run_id": str(evidence_bundle.activation_run_id) if evidence_bundle.activation_run_id else None,
+            },
+        )
+
+    # Call synthesis to generate opportunities
     total_candidates: int | None = None
     degraded_reason: str | None = None
+    pipeline_timings: PipelineTimings | None = None
 
     try:
-        drafts = graph_hero_generate_opportunities(
-            run_id=run_id,
-            brand_snapshot=snapshot,
-            learning_summary=learning_summary,
-            external_signals=external_signals,
-        )
+        if USE_SYNTHESIS_PIPELINE and evidence_bundle and evidence_bundle.items:
+            # NEW: Use multi-stage synthesis pipeline for better performance
+            logger.info(
+                "Using synthesis pipeline (USE_SYNTHESIS_PIPELINE=true)",
+                extra={"run_id": str(run_id), "brand_id": str(brand_id)},
+            )
+            drafts, pipeline_timings = run_synthesis_pipeline(
+                run_id=run_id,
+                brand_snapshot=snapshot,
+                evidence_items=evidence_bundle.items,
+            )
+        else:
+            # LEGACY: Use monolithic graph (fallback or when no evidence)
+            logger.info(
+                "Using legacy graph (USE_SYNTHESIS_PIPELINE=false or no evidence)",
+                extra={"run_id": str(run_id), "brand_id": str(brand_id)},
+            )
+            drafts = graph_hero_generate_opportunities(
+                run_id=run_id,
+                brand_snapshot=snapshot,
+                learning_summary=learning_summary,
+                external_signals=signals,  # PR-4b: Pure EvidenceBundle-derived signals
+            )
 
         # Track total candidates from graph before any filtering
         total_candidates = len(drafts)
@@ -149,18 +237,48 @@ def generate_today_board(
         deduped_drafts, dupe_count = _filter_redundant_opportunities(valid_drafts)
 
         # Persist valid, non-duplicate opportunities
+        # PR-4: Pass evidence_ids for propagation
         opportunities = _persist_opportunities(
             brand=brand,
             drafts=deduped_drafts,
             run_id=run_id,
+            evidence_ids=selected_evidence_ids,
         )
 
-        status = "success"
-        notes = [f"Generated {len(opportunities)} opportunities via graph"]
+        # Determine status based on opportunity count and MIN_READY_OPPS threshold
+        # CRITICAL: Partial success (1-2 opps) is still valid - better than nothing
+        if len(opportunities) >= MIN_READY_OPPS:
+            status = "success"
+        elif len(opportunities) > 0:
+            status = "partial"  # Less than minimum but still usable
+        else:
+            status = "empty"  # No opportunities at all
+
+        notes = [f"Generated {len(opportunities)} opportunities (min_required={MIN_READY_OPPS})"]
+        if status == "partial":
+            notes.append(f"Partial result: {len(opportunities)} < {MIN_READY_OPPS} minimum")
+        if pipeline_timings:
+            notes.append(f"Pipeline: {pipeline_timings.total_ms}ms total")
+            # Add expansion stats if available
+            if pipeline_timings.expansion_attempts > 0:
+                notes.append(
+                    f"Expansions: {pipeline_timings.expansion_successes}/{pipeline_timings.expansion_attempts} "
+                    f"(timeouts={pipeline_timings.expansion_timeouts}, failures={pipeline_timings.expansion_failures})"
+                )
         if invalid_count > 0:
             notes.append(f"Filtered {invalid_count} invalid opportunities")
         if dupe_count > 0:
             notes.append(f"Filtered {dupe_count} near-duplicate opportunities")
+
+        # Build metrics with optional pipeline timings
+        metrics = {
+            "opportunities_count": len(opportunities),
+            "invalid_filtered": invalid_count,
+            "duplicates_filtered": dupe_count,
+            "total_candidates": total_candidates,
+        }
+        if pipeline_timings:
+            metrics["pipeline_timings"] = pipeline_timings.to_dict()
 
         logger.info(
             "Today board generation complete",
@@ -168,10 +286,7 @@ def generate_today_board(
                 "run_id": str(run_id),
                 "brand_id": str(brand_id),
                 "status": status,
-                "opportunities_count": len(opportunities),
-                "invalid_filtered": invalid_count,
-                "duplicates_filtered": dupe_count,
-                "total_candidates": total_candidates,
+                **metrics,
             },
         )
 
@@ -181,12 +296,7 @@ def generate_today_board(
             brand_id=brand_id,
             flow="F1_today",
             status=status,
-            metrics={
-                "opportunities_count": len(opportunities),
-                "invalid_filtered": invalid_count,
-                "duplicates_filtered": dupe_count,
-                "total_candidates": total_candidates,
-            },
+            metrics=metrics,
         )
 
         # Classify and log classification
@@ -266,6 +376,7 @@ def _build_brand_snapshot(brand: Brand) -> BrandSnapshotDTO:
     Build a BrandSnapshotDTO from a Brand model.
 
     Loads related personas and pillars from DB.
+    Also extracts cta_policy and content_goal from BrandBrainSnapshot if available.
     """
     # Load personas
     personas = []
@@ -297,14 +408,72 @@ def _build_brand_snapshot(brand: Brand) -> BrandSnapshotDTO:
             )
         )
 
+    # Extract cta_policy and content_goal from BrandBrainSnapshot
+    # These fields are in snapshot_json.voice.cta_policy and snapshot_json.meta.content_goal
+    cta_policy = "soft"  # default
+    content_goal = None
+    voice_tone_tags = brand.tone_tags or []
+    taboos = brand.taboos or []
+
+    try:
+        # Import here to avoid circular dependency
+        from kairo.brandbrain.models import BrandBrainSnapshot
+
+        snapshot = BrandBrainSnapshot.objects.filter(brand=brand).order_by("-created_at").first()
+        if snapshot and snapshot.snapshot_json:
+            data = snapshot.snapshot_json
+
+            # Extract cta_policy from voice section
+            voice = data.get("voice", {})
+            cta_policy_field = voice.get("cta_policy", {})
+            if isinstance(cta_policy_field, dict):
+                cta_policy = cta_policy_field.get("value", "soft")
+            elif isinstance(cta_policy_field, str):
+                cta_policy = cta_policy_field
+
+            # Extract content_goal from meta section
+            meta = data.get("meta", {})
+            content_goal_field = meta.get("content_goal", {})
+            if isinstance(content_goal_field, dict):
+                content_goal = content_goal_field.get("value")
+            elif isinstance(content_goal_field, str):
+                content_goal = content_goal_field
+
+            # Also get tone_tags and taboos from snapshot if richer than Brand model
+            snapshot_tone_tags = voice.get("tone_tags", [])
+            if snapshot_tone_tags and len(snapshot_tone_tags) > len(voice_tone_tags):
+                voice_tone_tags = snapshot_tone_tags
+
+            snapshot_taboos = voice.get("taboos", [])
+            if snapshot_taboos and len(snapshot_taboos) > len(taboos):
+                taboos = snapshot_taboos
+
+            # Also extract pillars from snapshot if Brand model has none
+            if not pillars:
+                content_section = data.get("content", {})
+                content_pillars = content_section.get("content_pillars", [])
+                for i, p in enumerate(content_pillars):
+                    pillars.append(
+                        PillarDTO(
+                            id=uuid4(),  # Generate synthetic ID
+                            name=p.get("name", f"Pillar {i+1}"),
+                            description=p.get("description", ""),
+                        )
+                    )
+    except Exception as e:
+        # Log but don't fail - we have defaults
+        logger.warning(f"Failed to extract snapshot fields: {e}")
+
     return BrandSnapshotDTO(
         brand_id=brand.id,
         brand_name=brand.name,
         positioning=brand.positioning or None,
         pillars=pillars,
         personas=personas,
-        voice_tone_tags=brand.tone_tags or [],
-        taboos=brand.taboos or [],
+        voice_tone_tags=voice_tone_tags,
+        taboos=taboos,
+        cta_policy=cta_policy,
+        content_goal=content_goal,
     )
 
 
@@ -337,28 +506,107 @@ def _get_learning_summary_safe(brand_id: UUID, run_id: UUID) -> LearningSummaryD
         )
 
 
-def _get_external_signals_safe(brand_id: UUID, run_id: UUID):
+def _get_evidence_bundle_safe(brand_id: UUID, run_id: UUID, mode: str = "fixture_only"):
     """
-    Get external signals with fallback on error.
+    Get evidence bundle via SourceActivation with fallback on error.
 
-    Returns empty bundle if external_signals_service fails.
+    PR-4: Fixture-only mode - no Apify calls.
+    PR-6: Live-cap-limited mode - Apify calls with budget controls.
+    Returns None if SourceActivation fails.
+
+    Args:
+        brand_id: UUID of the brand
+        run_id: UUID of the job (for ActivationRun FK)
+        mode: "fixture_only" or "live_cap_limited"
     """
     try:
-        return external_signals_service.get_bundle_for_brand(brand_id)
+        from kairo.sourceactivation.services import derive_seed_pack, get_or_create_evidence_bundle
+
+        logger.info(
+            "Starting SourceActivation",
+            extra={
+                "run_id": str(run_id),
+                "brand_id": str(brand_id),
+                "mode": mode,
+            },
+        )
+
+        # Derive seed pack from brand
+        seed_pack = derive_seed_pack(brand_id)
+
+        # Get or create evidence bundle (PR-6: mode passed through)
+        evidence_bundle = get_or_create_evidence_bundle(
+            brand_id=brand_id,
+            seed_pack=seed_pack,
+            job_id=run_id,
+            mode=mode,
+        )
+
+        return evidence_bundle
+
     except Exception as e:
         logger.warning(
-            "External signals fetch failed, using empty bundle",
+            "SourceActivation failed, continuing without evidence",
             extra={
                 "run_id": str(run_id),
                 "brand_id": str(brand_id),
                 "error": str(e),
             },
         )
-        from kairo.hero.dto import ExternalSignalBundleDTO
+        return None
 
+
+def _convert_evidence_to_signals(brand_id: UUID, run_id: UUID, evidence_bundle):
+    """
+    Convert EvidenceBundle to signals for graph consumption.
+
+    PR-4b: Per PRD §C.1, this is a REPLACEMENT, not merge.
+    Signals come exclusively from SourceActivation's EvidenceBundle.
+
+    If evidence_bundle is None or empty, returns empty signals bundle.
+    This may result in a degraded board state.
+    """
+    from kairo.hero.dto import ExternalSignalBundleDTO
+
+    now = datetime.now(timezone.utc)
+
+    # No evidence bundle = empty signals (may trigger degraded state)
+    if not evidence_bundle or not evidence_bundle.items:
+        logger.info(
+            "No evidence bundle available, using empty signals",
+            extra={"run_id": str(run_id), "brand_id": str(brand_id)},
+        )
         return ExternalSignalBundleDTO(
             brand_id=brand_id,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=now,
+            trends=[],
+            web_mentions=[],
+            competitor_posts=[],
+            social_moments=[],
+        )
+
+    # Convert evidence to signals (pure transformation, no merge)
+    try:
+        from kairo.sourceactivation.adapters import convert_evidence_bundle_to_signals
+        signals = convert_evidence_bundle_to_signals(evidence_bundle)
+        logger.debug(
+            "Converted %d evidence items to signals (pure, no merge)",
+            len(evidence_bundle.items),
+            extra={"run_id": str(run_id), "brand_id": str(brand_id)},
+        )
+        return signals
+    except Exception as e:
+        logger.warning(
+            "Evidence to signals conversion failed, using empty signals",
+            extra={
+                "run_id": str(run_id),
+                "brand_id": str(brand_id),
+                "error": str(e),
+            },
+        )
+        return ExternalSignalBundleDTO(
+            brand_id=brand_id,
+            fetched_at=now,
             trends=[],
             web_mentions=[],
             competitor_posts=[],
@@ -463,9 +711,19 @@ def _persist_opportunities(
     brand: Brand,
     drafts: list[OpportunityDraftDTO],
     run_id: UUID,
+    evidence_ids: list[UUID] | None = None,
 ) -> list[Opportunity]:
     """
     Persist OpportunityDraftDTOs as Opportunity rows.
+
+    PR-2: why_now is REQUIRED for persistence.
+    - Drafts with missing/invalid why_now are SKIPPED (not persisted)
+    - why_now must be non-empty and >= 10 chars after stripping
+
+    PR-4b: evidence_ids contract enforcement (per PRD §F.1).
+    - For READY board, evidence_ids must be >= 1
+    - All persisted opportunities receive the same selected evidence_ids
+    - If evidence_ids is empty, NO drafts are persisted (board = insufficient_evidence)
 
     Idempotency rules:
     - Each run creates new opportunities
@@ -477,8 +735,39 @@ def _persist_opportunities(
     now = datetime.now(timezone.utc)
     opportunities = []
 
+    # PR-4b: Convert evidence_ids to strings for JSON storage
+    evidence_ids_str = [str(eid) for eid in (evidence_ids or [])]
+
+    # PR-4b: REQUIRED - evidence_ids must be non-empty for READY opportunities
+    # Per PRD §F.1: evidence_ids min_length=1 for real opportunities
+    if not evidence_ids_str:
+        logger.warning(
+            "No evidence_ids provided - cannot persist READY opportunities",
+            extra={
+                "run_id": str(run_id),
+                "brand_id": str(brand.id),
+                "draft_count": len(drafts),
+                "reason": "PRD §F.1 requires evidence_ids >= 1 for READY opportunities",
+            },
+        )
+        return []  # Return empty - triggers degraded/insufficient_evidence board
+
     with transaction.atomic():
         for draft in drafts:
+            # PR-2: Validate why_now (REQUIRED, >= 10 chars)
+            why_now = (draft.why_now or "").strip()
+            if len(why_now) < 10:
+                logger.warning(
+                    "Skipping draft with invalid why_now",
+                    extra={
+                        "run_id": str(run_id),
+                        "title": draft.proposed_title[:50],
+                        "why_now_len": len(why_now),
+                        "reason": "why_now must be >= 10 chars",
+                    },
+                )
+                continue  # Skip this draft - do not persist
+
             # Generate deterministic ID based on brand_id + title
             # This ensures idempotency if the same opportunity is generated again
             opp_id = uuid5(
@@ -501,6 +790,8 @@ def _persist_opportunities(
                     pillar_id = pillar.id
 
             # Create or update opportunity
+            # PR-2: Store why_now and evidence_ids in metadata
+            # PR-4: Populate evidence_ids from SourceActivation
             opp, created = Opportunity.objects.update_or_create(
                 id=opp_id,
                 defaults={
@@ -521,6 +812,10 @@ def _persist_opportunities(
                         "raw_reasoning": draft.raw_reasoning,
                         "run_id": str(run_id),
                         "generated_at": now.isoformat(),
+                        # PR-2: Persist why_now (REQUIRED)
+                        "why_now": why_now,
+                        # PR-4: Populate evidence_ids from SourceActivation
+                        "evidence_ids": evidence_ids_str,
                     },
                 },
             )
@@ -534,6 +829,8 @@ def _persist_opportunities(
                     "opp_id": str(opp_id),
                     "title": draft.proposed_title[:50],
                     "created": created,
+                    "why_now_len": len(why_now),
+                    "evidence_ids_count": len(evidence_ids_str),
                 },
             )
 
@@ -673,7 +970,9 @@ def _generate_stub_opportunities(brand: Brand, run_id: UUID) -> list[Opportunity
                     "metadata": {
                         "stub": True,
                         "degraded_run_id": str(run_id),
+                        # PR-2: Required fields
                         "why_now": template["why_now"],
+                        "evidence_ids": [],  # Forward-compat (stubs have no evidence)
                         "generated_at": now.isoformat(),
                     },
                 },
@@ -736,11 +1035,35 @@ def _build_today_board_dto(
         except Exception:
             pillar_id = None
 
+        # PR-2: Read why_now and evidence_ids from metadata
+        metadata = opp.metadata or {}
+        why_now = metadata.get("why_now", "")
+
+        # PR-2: Invalid why_now is an INVARIANT VIOLATION
+        # This function is called after _persist_opportunities which filters invalid drafts.
+        # If we get here with invalid why_now, something is broken.
+        if not why_now or len(why_now.strip()) < 10:
+            raise ValueError(
+                f"PR-2 invariant violation: Opportunity {opp.id} has invalid why_now "
+                f"(length={len(why_now.strip()) if why_now else 0}). "
+                "This should have been filtered at persist-time."
+            )
+
+        # PR-2: Parse evidence_ids (may be empty until PR-4/5)
+        evidence_ids_raw = metadata.get("evidence_ids", [])
+        evidence_ids = []
+        for eid in evidence_ids_raw:
+            try:
+                evidence_ids.append(UUID(str(eid)))
+            except (ValueError, TypeError):
+                pass
+
         opp_dto = OpportunityDTO(
             id=opp.id,
             brand_id=opp.brand_id,
             title=opp.title,
             angle=opp.angle,
+            why_now=why_now.strip(),  # PR-2: Required field
             type=OpportunityType(opp.type),
             primary_channel=Channel(opp.primary_channel),
             score=opp.score,
@@ -750,6 +1073,7 @@ def _build_today_board_dto(
             persona_id=persona_id,
             pillar_id=pillar_id,
             suggested_channels=[Channel(c) for c in (opp.suggested_channels or [])],
+            evidence_ids=evidence_ids,  # PR-2: Forward-compat field
             is_pinned=opp.is_pinned,
             is_snoozed=opp.is_snoozed,
             snoozed_until=opp.snoozed_until,

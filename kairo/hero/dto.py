@@ -2,6 +2,7 @@
 Kairo Hero Loop DTOs.
 
 PR-2: DTOs + Validation Layer + API Contracts.
+PR-5: Evidence preview read-time join.
 
 These Pydantic v2 BaseModels define the request/response shapes for the hero loop API.
 They serve as contracts - once defined, fields cannot be renamed or removed without
@@ -115,6 +116,42 @@ class BrandSnapshotDTO(BaseModel):
     voice_tone_tags: list[str] = Field(default_factory=list)
     taboos: list[str] = Field(default_factory=list)
 
+    # Social presence nuance (PR-X: CTA and content goal awareness)
+    # cta_policy: none = never sell, soft = value-first occasional soft CTA,
+    #             direct = clear CTAs ok, aggressive = every post drives action
+    cta_policy: Literal["none", "soft", "direct", "aggressive"] = "soft"
+    # content_goal: what the brand wants to achieve with content
+    content_goal: str | None = None
+
+
+# =============================================================================
+# EVIDENCE PREVIEW DTO (PR-5)
+# =============================================================================
+
+
+class EvidencePreviewDTO(BaseModel):
+    """
+    Lightweight preview of evidence for UI display.
+
+    PR-5: Derived at read-time from EvidenceItem rows. NOT stored redundantly in Opportunity.
+    Per PRD F.1.
+
+    Fields:
+    - id: UUID of the EvidenceItem
+    - platform: Source platform (instagram, tiktok, etc.)
+    - canonical_url: URL to the original content
+    - author_ref: Username or handle of the author
+    - text_snippet: First 200 chars of text_primary (truncated with ...)
+    - has_transcript: Whether the evidence has a transcript
+    """
+
+    id: UUID
+    platform: str
+    canonical_url: str
+    author_ref: str
+    text_snippet: str = Field(max_length=203, description="First 200 chars of text_primary")
+    has_transcript: bool
+
 
 # =============================================================================
 # OPPORTUNITY DTOs
@@ -127,11 +164,20 @@ class OpportunityDTO(BaseModel):
 
     Per PRD-1 §3.1.5 and 02-canonical-objects.md §8.
     Represents an "atom" on the Today board.
+
+    PR-2 additions:
+    - why_now: Required timing justification (>= 10 chars)
+    - evidence_ids: Forward-compat field for evidence linking (may be empty until PR-4/5)
+
+    PR-5 additions:
+    - evidence_preview: Read-time joined previews from EvidenceItem table
     """
     id: UUID
     brand_id: UUID
     title: str
     angle: str
+    # PR-2: why_now is REQUIRED for valid opportunities
+    why_now: str = Field(..., min_length=10, description="Timing justification for this opportunity")
     type: OpportunityType
     primary_channel: Channel
     score: float = Field(ge=0, le=100)
@@ -141,6 +187,13 @@ class OpportunityDTO(BaseModel):
     persona_id: UUID | None = None
     pillar_id: UUID | None = None
     suggested_channels: list[Channel] = Field(default_factory=list)
+    # PR-2: evidence_ids forward-compat (may be empty until PR-4/5)
+    evidence_ids: list[UUID] = Field(default_factory=list, description="Evidence items backing this opportunity")
+    # PR-5: Evidence previews populated at read-time (not stored in Opportunity)
+    evidence_preview: list[EvidencePreviewDTO] = Field(
+        default_factory=list,
+        description="Evidence previews populated at read-time from EvidenceItem table",
+    )
     is_pinned: bool = False
     is_snoozed: bool = False
     snoozed_until: datetime | None = None
