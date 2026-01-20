@@ -100,6 +100,9 @@ def sample_opportunity(sample_brand_id):
         brand_id=sample_brand_id,
         title="AI Marketing Trends: What CMOs Need to Know",
         angle="Emerging AI tools are transforming how marketing teams work. Share insights on practical adoption.",
+        # PR-2/4b: Required fields
+        why_now="AI adoption is accelerating across marketing teams, making this a timely topic for thought leadership.",
+        evidence_ids=[uuid4(), uuid4()],
         type=OpportunityType.TREND,
         primary_channel=Channel.LINKEDIN,
         score=85.0,
@@ -815,6 +818,9 @@ class TestQualityBands:
             brand_id=sample_brand_snapshot.brand_id,
             title="Content strategy basics",  # 'content' keyword will overlap
             angle="Learning fundamentals",  # 'learning' available
+            # PR-2/4b: Required fields
+            why_now="Content strategy is evolving with new trends in marketing automation.",
+            evidence_ids=[uuid4()],
             type=OpportunityType.TREND,
             primary_channel=Channel.LINKEDIN,
             score=85.0,

@@ -110,6 +110,8 @@ def brand_with_personas_and_pillars(db, tenant):
 @pytest.fixture
 def opportunity(db, brand):
     """Create a test opportunity."""
+    import uuid
+
     return Opportunity.objects.create(
         brand=brand,
         title="AI Marketing Trends: What CMOs Need to Know",
@@ -123,6 +125,11 @@ def opportunity(db, brand):
         is_pinned=False,
         is_snoozed=False,
         created_via=CreatedVia.AI_SUGGESTED,
+        # PR-2/4b: Required metadata fields
+        metadata={
+            "why_now": "AI adoption is accelerating across marketing teams, making this a timely topic for thought leadership.",
+            "evidence_ids": [str(uuid.uuid4()), str(uuid.uuid4())],
+        },
     )
 
 
@@ -728,6 +735,8 @@ class TestHintResolution:
         sample_package_draft,
     ):
         """Persona hint is resolved to actual persona ID."""
+        import uuid
+
         # Create opportunity for this brand
         opp = Opportunity.objects.create(
             brand=brand_with_personas_and_pillars,
@@ -737,6 +746,10 @@ class TestHintResolution:
             primary_channel=Channel.LINKEDIN,
             score=80.0,
             created_via=CreatedVia.AI_SUGGESTED,
+            metadata={
+                "why_now": "Testing persona resolution requires valid why_now field.",
+                "evidence_ids": [str(uuid.uuid4())],
+            },
         )
 
         # Draft with persona hint
@@ -760,6 +773,8 @@ class TestHintResolution:
         sample_package_draft,
     ):
         """Pillar hint is resolved to actual pillar ID."""
+        import uuid
+
         # Create opportunity for this brand
         opp = Opportunity.objects.create(
             brand=brand_with_personas_and_pillars,
@@ -769,6 +784,10 @@ class TestHintResolution:
             primary_channel=Channel.LINKEDIN,
             score=80.0,
             created_via=CreatedVia.AI_SUGGESTED,
+            metadata={
+                "why_now": "Testing pillar resolution requires valid why_now field.",
+                "evidence_ids": [str(uuid.uuid4())],
+            },
         )
 
         # Draft with pillar hint
@@ -1066,6 +1085,8 @@ Key points:
             taboos=["banned phrase"],
         )
 
+        import uuid
+
         opp = Opportunity.objects.create(
             brand=brand,
             title="Test Opportunity",
@@ -1074,6 +1095,10 @@ Key points:
             primary_channel=Channel.LINKEDIN,
             score=80.0,
             created_via=CreatedVia.AI_SUGGESTED,
+            metadata={
+                "why_now": "Testing taboo enforcement requires valid why_now field.",
+                "evidence_ids": [str(uuid.uuid4())],
+            },
         )
 
         pkg_draft = ContentPackageDraftDTO(

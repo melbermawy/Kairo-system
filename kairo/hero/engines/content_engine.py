@@ -190,6 +190,12 @@ def create_package_from_opportunity(
     # Convert opportunity to DTO
     opp_dto = _opportunity_to_dto(opportunity)
 
+    # PR-2: Check for invalid opportunity (missing why_now)
+    if opp_dto is None:
+        raise ValueError(
+            f"Opportunity {opportunity.id} has invalid or missing why_now - cannot create package"
+        )
+
     # Get LLM client
     llm_client = get_default_client()
 
@@ -521,13 +527,36 @@ def _build_brand_snapshot(brand: Brand) -> BrandSnapshotDTO:
     )
 
 
-def _opportunity_to_dto(opportunity: Opportunity) -> OpportunityDTO:
-    """Convert Opportunity model to OpportunityDTO."""
+def _opportunity_to_dto(opportunity: Opportunity) -> OpportunityDTO | None:
+    """Convert Opportunity model to OpportunityDTO.
+
+    PR-2: Reads why_now and evidence_ids from metadata.
+    Returns None if opportunity has invalid why_now.
+    """
+    # PR-2: Read why_now and evidence_ids from metadata
+    metadata = opportunity.metadata or {}
+    why_now = metadata.get("why_now", "")
+
+    # PR-2: Skip opportunities with invalid why_now
+    if not why_now or len(why_now.strip()) < 10:
+        return None
+
+    # PR-2: Parse evidence_ids (may be empty until PR-4/5)
+    evidence_ids_raw = metadata.get("evidence_ids", [])
+    from uuid import UUID
+    evidence_ids = []
+    for eid in evidence_ids_raw:
+        try:
+            evidence_ids.append(UUID(str(eid)))
+        except (ValueError, TypeError):
+            pass
+
     return OpportunityDTO(
         id=opportunity.id,
         brand_id=opportunity.brand_id,
         title=opportunity.title,
         angle=opportunity.angle,
+        why_now=why_now.strip(),  # PR-2: Required field
         type=opportunity.type,
         primary_channel=opportunity.primary_channel,
         score=opportunity.score,
@@ -537,6 +566,7 @@ def _opportunity_to_dto(opportunity: Opportunity) -> OpportunityDTO:
         persona_id=opportunity.persona_id,
         pillar_id=opportunity.pillar_id,
         suggested_channels=opportunity.suggested_channels or [],
+        evidence_ids=evidence_ids,  # PR-2: Forward-compat field
         is_pinned=opportunity.is_pinned,
         is_snoozed=opportunity.is_snoozed,
         snoozed_until=opportunity.snoozed_until,

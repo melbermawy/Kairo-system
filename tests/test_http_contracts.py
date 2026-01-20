@@ -82,7 +82,10 @@ def sample_brand_id(brand) -> str:
 
 @pytest.fixture
 def opportunity(db, brand):
-    """Create a real opportunity for decision tests."""
+    """Create a real opportunity for decision tests.
+
+    PR-4c: Updated to include required metadata (why_now, evidence_ids).
+    """
     return Opportunity.objects.create(
         brand=brand,
         type=OpportunityType.TREND,
@@ -91,7 +94,10 @@ def opportunity(db, brand):
         score=0.75,
         primary_channel=Channel.LINKEDIN,
         created_via=CreatedVia.AI_SUGGESTED,
-        metadata={},
+        metadata={
+            "why_now": "Market trends show high engagement with this topic area, making it timely for our audience.",
+            "evidence_ids": [str(uuid4()), str(uuid4())],
+        },
     )
 
 
@@ -265,10 +271,13 @@ class TestTodayBoardEndpoints:
         assert dto.job_id is not None
         assert dto.poll_url is not None
 
-    def test_regenerate_today_board_legacy_returns_200(self, client: Client, sample_brand_id: str):
-        """LEGACY: POST /api/brands/{brand_id}/today/regenerate?legacy=true returns 200."""
+    def test_regenerate_today_board_legacy_returns_410_gone(self, client: Client, sample_brand_id: str):
+        """PR-1: Legacy mode is disabled - returns 410 Gone."""
         response = client.post(f"/api/brands/{sample_brand_id}/today/regenerate/?legacy=true")
-        assert response.status_code == 200
+        # PR-1: Legacy synchronous generation is disabled
+        assert response.status_code == 410
+        data = response.json()
+        assert data["error"]["code"] == "legacy_mode_disabled"
 
     def test_regenerate_today_board_missing_brand_returns_404(self, client: Client, db):
         """POST /api/brands/{valid-but-missing}/today/regenerate returns 404."""

@@ -2,10 +2,10 @@
   "_comment": "Eval fixture brands for PR-10. These are eval-only identifiers, not DB PKs.",
   "brands": [
     {
-      "eval_brand_id": "eval_brand_revops_saas",
+      "eval_brand_id": "eval_brand_goodie_ai",
       "tenant_slug": "eval-tenant",
-      "brand_slug": "eval-revops-saas",
-      "brand_name": "RevOps Intelligence",
+      "brand_slug": "goodie-ai",
+      "brand_name": "Goodie AI",
       "channels": ["linkedin", "x"],
       "snapshot": {
         "positioning": "We help B2B SaaS revenue teams eliminate data silos and drive predictable growth through unified RevOps automation.",

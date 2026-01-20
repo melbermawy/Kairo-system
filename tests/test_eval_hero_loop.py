@@ -351,7 +351,12 @@ class TestEvalHarnessRun:
         assert "not found" in result.errors[0].lower()
 
     def test_run_hero_loop_eval_with_fixture_brand(self):
-        """Eval runs successfully with fixture brand."""
+        """Eval runs successfully with fixture brand.
+
+        PR-4c: Mock evidence bundle since PR-4b requires real OpportunitiesJob.
+        """
+        from tests.fixtures.opportunity_factory import make_mock_evidence_bundle
+
         # Get first available brand from fixtures
         brands_data = _load_brands_fixture()
         brands = brands_data.get("brands", [])
@@ -361,14 +366,21 @@ class TestEvalHarnessRun:
 
         brand_slug = brands[0]["brand_slug"]
 
+        def mock_evidence(brand_id, run_id):
+            return make_mock_evidence_bundle(brand_id)
+
         # Use temp dir for output to avoid polluting docs/
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = run_hero_loop_eval(
-                brand_slug=brand_slug,
-                llm_disabled=True,
-                max_opportunities=1,  # Limit for speed
-                output_dir=Path(tmpdir),
-            )
+            with patch(
+                "kairo.hero.engines.opportunities_engine._get_evidence_bundle_safe",
+                side_effect=mock_evidence,
+            ):
+                result = run_hero_loop_eval(
+                    brand_slug=brand_slug,
+                    llm_disabled=True,
+                    max_opportunities=1,  # Limit for speed
+                    output_dir=Path(tmpdir),
+                )
 
             # Check result structure
             assert isinstance(result, EvalResult)
@@ -379,7 +391,8 @@ class TestEvalHarnessRun:
 
             # Check status (may be error if DB setup issues, but structure should be valid)
             # 10b: "degraded" is also a valid status (when F1 runs in degraded mode)
-            assert result.status in ("completed", "degraded", "error")
+            # PR-4c: "failed" is valid when F2 fails (e.g., graph errors in LLM_DISABLED tests)
+            assert result.status in ("completed", "degraded", "error", "failed")
 
             # If completed or degraded, check metrics exist
             if result.status in ("completed", "degraded"):

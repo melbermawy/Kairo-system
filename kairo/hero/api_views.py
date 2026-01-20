@@ -122,7 +122,14 @@ def get_today_board(request: HttpRequest, brand_id: str) -> JsonResponse:
             details={"brand_id": brand_id},
         )
 
-    return JsonResponse(dto.model_dump(mode="json"))
+    # CRITICAL: Disable browser caching for polling endpoint.
+    # Without this header, browsers may serve stale responses during polling,
+    # causing UI to stay stuck in "generating" state even after job completes.
+    response = JsonResponse(dto.model_dump(mode="json"))
+    response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response["Pragma"] = "no-cache"  # HTTP/1.0 compatibility
+    response["Expires"] = "0"
+    return response
 
 
 @csrf_exempt

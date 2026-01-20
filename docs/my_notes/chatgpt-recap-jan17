@@ -1,0 +1,439 @@
+Kairo — Canonical Continuity & Pre-Spec Context Document
+
+Purpose of this document
+
+This document exists as a continuity anchor. Its sole goal is to allow a fresh ChatGPT session (or any collaborator) to fully reconstruct the mental model, vision, constraints, decisions, and engineering reality of the Kairo project without relying on chat history.
+
+It is intentionally long, explicit, and redundant where needed. This is not a spec, not a PRD, and not an implementation guide. It is the ground truth context that must be understood before writing specs.
+
+⸻
+
+1. What Kairo Is (and Is Not)
+
+1.1 What Kairo Is
+
+Kairo is an AI-native content intelligence system designed to help brands:
+	1.	Understand their positioning and constraints (via BrandBrain)
+	2.	Continuously scan the external world for content opportunities
+	3.	Help humans convert those opportunities into clear content concepts
+	4.	Generate content packages (hooks, beats, snippets, direction) — not documents
+
+Kairo is not a social media scheduler, not a doc editor, and not a generic “AI copywriter.” Its value is upstream clarity and leverage, not downstream execution.
+
+At a high level, Kairo is a loop, not a single action:
+
+BrandBrain → Opportunities → Concept Builder → Content Packages → Learning → (feeds back)
+
+Each stage has strict boundaries, ownership, and contracts.
+
+⸻
+
+1.2 What Kairo Is Not
+
+Kairo is explicitly not:
+	•	A WYSIWYG editor
+	•	A Google Docs replacement
+	•	A scheduling / posting tool
+	•	A prompt playground
+	•	A monolithic AI agent that “does everything”
+
+Humans remain responsible for:
+	•	final wording
+	•	creative judgment
+	•	distribution
+
+Kairo provides structure, insight, and leverage, not replacement.
+
+⸻
+
+2. The Core Loop (Correct Mental Model)
+
+This loop distinction is critical and was clarified multiple times to avoid conceptual bugs.
+
+2.1 BrandBrain (Upstream Authority)
+
+BrandBrain is the authoritative internal representation of a brand.
+
+It includes (at minimum):
+	•	positioning
+	•	audience intent
+	•	tone / voice constraints
+	•	taboos
+	•	pillars
+	•	personas
+	•	competitive landscape (when available)
+
+BrandBrain:
+	•	is compiled (slow, heavy, explicit UI feedback)
+	•	is the source of truth for all downstream logic
+	•	does not depend on opportunities or concepts
+
+BrandBrain output is consumed by:
+	•	Opportunity engine (to know what to look for)
+	•	Concept builder (to know what’s allowed)
+	•	Content packaging (to know how to phrase things)
+
+⸻
+
+2.2 Opportunities (External World Scan)
+
+Opportunities answer the question:
+
+“Given who this brand is, what external situations are worth making content about right now?”
+
+Key properties:
+	•	An opportunity is not a post
+	•	An opportunity is not a hook
+	•	An opportunity is not a concept
+
+An opportunity represents:
+	•	a trend
+	•	a competitor move or gap
+	•	a news moment
+	•	a community signal
+
+Opportunities are candidate situations that could justify content.
+
+⸻
+
+2.3 Concept Builder (Human Intent Layer)
+
+The Concept Builder is where the human intervenes.
+
+It answers:
+
+“Given this opportunity, what do I want to say and how do I want to say it?”
+
+It is:
+	•	structured
+	•	opinionated
+	•	tiered (minimal required vs optional enrichment)
+
+Concept Builder outputs a Concept Object that is later consumed by the content engine.
+
+⸻
+
+2.4 Content Packages (Downstream Output)
+
+Content Packages:
+	•	are not documents
+	•	are not scripts
+	•	are not final copy
+
+They include:
+	•	multiple hooks (variants)
+	•	beats / narrative structure
+	•	proof points
+	•	CTAs
+	•	pre-production direction
+
+Everything is copy-pasteable and meant to accelerate human writing elsewhere.
+
+⸻
+
+3. What Is Already Implemented (Reality Check)
+
+A critical realization in this project was that we already have a real backend, not a toy.
+
+3.1 Existing Backend: Opportunities Phase 0
+
+There is a fully implemented Opportunities engine with:
+	•	API endpoints (/today, /regenerate)
+	•	persistence models
+	•	deterministic IDs
+	•	deduplication
+	•	scoring
+	•	degraded mode fallback
+	•	DTO separation (Draft → DTO → Board)
+	•	LLM graphs
+
+However:
+	•	it is LinkedIn-centric
+	•	it assumes outdated channel logic
+	•	external signals are stubbed
+	•	BrandBrain did not exist at the time
+
+The correct decision (locked):
+
+Reuse the skeleton. Replace the brain.
+
+We explicitly do not throw this away.
+
+⸻
+
+3.2 What We Keep
+
+We keep:
+	•	orchestration
+	•	persistence
+	•	idempotency
+	•	DTO separation
+	•	dedupe
+	•	degraded mode
+	•	observability hooks
+
+These are expensive to rebuild correctly and already exist.
+
+⸻
+
+3.3 What We Replace
+
+We replace:
+	•	source strategy
+	•	external signal wiring
+	•	channel assumptions
+	•	scoring semantics (but not the mechanism)
+	•	opportunity meaning
+	•	DTO contracts (vNext)
+
+This is a refactor, not a rewrite.
+
+⸻
+
+4. Frontend: What It Is and Is Not
+
+The existing frontend (Today page) exists primarily as a visual exploration.
+
+4.1 What Frontend Is Used For
+	•	understanding card layout
+	•	understanding UX flow
+	•	visualizing end-state
+	•	discovering product nuance
+
+4.2 What Frontend Is Not
+	•	a source of truth
+	•	a schema authority
+	•	a contract reference
+
+All frontend contracts must be driven by backend DTOs.
+
+Current frontend data is fake / placeholder.
+
+⸻
+
+5. Performance & UX Philosophy
+
+Two principles coexist:
+	1.	Good engineering (don’t be slow because you’re sloppy)
+	2.	Honest UX (some work is inherently slow)
+
+5.1 Backend Principles
+	•	bounded LLM calls
+	•	deterministic input builders
+	•	caching where appropriate
+	•	strict caps
+	•	idempotency
+
+5.2 Frontend Principles
+	•	explicit loading states
+	•	no “frozen UI”
+	•	communicate what’s happening
+
+This applies to:
+	•	Today board generation
+	•	BrandBrain compilation
+
+⸻
+
+6. Opportunity Feature — Vision (Locked)
+
+6.1 Opportunity Definition (Locked)
+
+An opportunity is:
+
+A brand-relevant external signal that justifies creating content at this time.
+
+It is not a post. It is not a script. It is not a hook.
+
+⸻
+
+6.2 Opportunity Types (V1 Locked)
+	•	Trend
+	•	Competitor
+	•	News
+	•	Community signal
+
+No more, no less.
+
+⸻
+
+6.3 Evidence
+	•	Minimum: 1 evidence item
+	•	Evidence can be heterogeneous
+	•	Evidence shape must be normalized
+
+We do not over-optimize this pre-spec.
+
+⸻
+
+7. Source Strategy (Deeply Discussed)
+
+7.1 Two-Stage Source Activation (Locked)
+
+Stage 1: Discovery / Search
+	•	broad scanning
+	•	hashtags
+	•	search queries
+	•	competitors
+
+Stage 2: Deep Extraction
+	•	post URLs
+	•	transcripts
+	•	rich metadata
+
+Stage 2 is expensive and selective.
+
+⸻
+
+7.2 Instagram Strategy (Key Nuance)
+	•	Instagram Reels Scraper is rich but requires known targets
+	•	Instagram Scraper supports search / hashtags / discovery
+
+Correct strategy:
+	•	use Instagram Scraper for discovery
+	•	feed URLs into Reels Scraper for deep extraction
+
+⸻
+
+7.3 TikTok Strategy
+	•	TikTok surfaces trends earlier
+	•	hashtag search is powerful
+	•	used to enrich confidence and freshness
+
+TikTok is complementary, not identical to IG.
+
+⸻
+
+7.4 Seed Terms
+
+Seed terms come from:
+	•	BrandBrain (structured + unstructured)
+	•	high-volume generic hashtags (#fyp, #viral, etc.)
+	•	niche tags derived from brand context
+
+This requires a pipeline, not hardcoding.
+
+⸻
+
+7.5 Budget & Caps
+	•	caps are enforced
+	•	recency windows are enforced
+	•	credits are spent intentionally
+
+Exact numbers are spec-level decisions.
+
+⸻
+
+8. Concept Builder — Vision (Locked)
+
+8.1 Purpose
+
+Concept Builder bridges:
+
+Opportunity → Human Intent → Machine-usable Concept
+
+
+⸻
+
+8.2 Tiered Inputs
+
+Tier 1 (Required):
+	•	What’s your take?
+	•	Format (grouped platforms)
+	•	Target audience (human-readable)
+
+Tier 2 (Optional):
+	•	Proof points
+	•	CTA
+	•	Constraints
+
+Tiering reduces friction.
+
+⸻
+
+8.3 Target Audience (Resolved Philosophy)
+
+Audience labels are:
+	•	human
+	•	casual
+	•	non-marketing-jargon
+
+Examples:
+	•	existing followers
+	•	general audience
+	•	customers
+	•	peers
+	•	community
+
+No funnel-stage jargon.
+
+⸻
+
+9. DeepAgents & LLM Graphs (Clarified)
+
+9.1 What DeepAgents Are
+	•	bounded reasoning units
+	•	used inside pipelines
+	•	deterministic inputs
+	•	deterministic outputs
+
+9.2 What They Are Not
+	•	not DTO authors
+	•	not product decision makers
+	•	not free-form copilots
+
+They serve the system, not the other way around.
+
+⸻
+
+9.3 Graph Philosophy
+
+Graphs:
+	•	have strict nodes
+	•	strict contracts
+	•	strict validation
+
+LLMs are tools, not arbiters of truth.
+
+⸻
+
+10. Spec Philosophy (Important)
+
+We explicitly separated:
+	•	Vision locking (this document)
+	•	Spec writing (next phase)
+
+Spec writing will:
+	•	define DTO vNext
+	•	define scoring language
+	•	define freshness logic
+	•	wire sources
+
+But it must be anchored in everything above.
+
+⸻
+
+11. Purpose of the Chat
+
+This chat existed to:
+	•	surface hidden mismatches
+	•	correct mental models
+	•	align on boundaries
+	•	prevent bad specs
+
+The result is not code — it is clarity.
+
+⸻
+
+12. How to Use This Document
+
+When starting a new chat:
+	1.	Paste this document
+	2.	Ask the model to read it carefully
+	3.	Only then resume work
+
+If the model misunderstands fundamentals after reading this, it is not usable.
+
+⸻
+
+End of Canonical Continuity Document

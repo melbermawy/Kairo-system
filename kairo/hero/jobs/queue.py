@@ -89,21 +89,38 @@ def enqueue_opportunities_job(
     *,
     force: bool = False,
     first_run: bool = False,
+    mode: str | None = None,
 ) -> EnqueueResult:
     """
     Enqueue an opportunities generation job for background execution.
 
     Creates an OpportunitiesJob in PENDING status.
 
+    PR-6: Mode selection rule:
+    - force=True (POST /regenerate): live_cap_limited (if APIFY_ENABLED)
+    - first_run=True (auto-enqueue): fixture_only (always)
+    - Default: fixture_only
+
     Args:
         brand_id: UUID of the brand
         force: Whether this is a force regeneration (from POST /regenerate)
         first_run: Whether this is a first-run auto-enqueue (from GET with evidence)
+        mode: Explicit mode override (if None, determined from force/first_run)
 
     Returns:
         EnqueueResult with job_id and brand_id
     """
+    from kairo.core.guardrails import is_apify_enabled
     from kairo.hero.models import OpportunitiesJob, OpportunitiesJobStatus
+
+    # PR-6: Determine mode based on context
+    if mode is None:
+        if force and is_apify_enabled():
+            # POST /regenerate with Apify enabled → live mode
+            mode = "live_cap_limited"
+        else:
+            # First-run auto-enqueue or Apify disabled → fixture mode
+            mode = "fixture_only"
 
     job = OpportunitiesJob.objects.create(
         brand_id=brand_id,
@@ -111,15 +128,17 @@ def enqueue_opportunities_job(
         params_json={
             "force": force,
             "first_run": first_run,
+            "mode": mode,  # PR-6: Store mode in job params
         },
     )
 
     logger.info(
-        "Enqueued opportunities job %s for brand %s (force=%s, first_run=%s)",
+        "Enqueued opportunities job %s for brand %s (force=%s, first_run=%s, mode=%s)",
         job.id,
         brand_id,
         force,
         first_run,
+        mode,
     )
 
     return EnqueueResult(

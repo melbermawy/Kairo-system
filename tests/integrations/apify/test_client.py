@@ -3,6 +3,9 @@ Unit tests for Apify client.
 
 Tests URL building, error handling, and response parsing.
 Uses mocked HTTP (no network calls).
+
+PR-0: Tests that call Apify client methods require APIFY_ENABLED=true.
+The enable_apify fixture overrides the setting for these tests.
 """
 
 from datetime import datetime, timezone
@@ -17,6 +20,19 @@ from kairo.integrations.apify.client import (
     ApifyTimeoutError,
     RunInfo,
 )
+
+
+# =============================================================================
+# PR-0: Fixture to enable Apify for client tests
+# =============================================================================
+
+
+@pytest.fixture
+def enable_apify(settings):
+    """Enable APIFY_ENABLED for tests that need to call client methods."""
+    settings.APIFY_ENABLED = True
+    yield
+    settings.APIFY_ENABLED = False
 
 
 class TestApifyClientInit:
@@ -39,6 +55,7 @@ class TestApifyClientInit:
             ApifyClient(token="")
 
 
+@pytest.mark.usefixtures("enable_apify")
 class TestApifyClientStartActorRun:
     """Tests for start_actor_run method."""
 
@@ -106,6 +123,7 @@ class TestApifyClientStartActorRun:
             client.start_actor_run("actor/test", {})
 
 
+@pytest.mark.usefixtures("enable_apify")
 class TestApifyClientPollRun:
     """Tests for poll_run method."""
 
@@ -163,6 +181,7 @@ class TestApifyClientPollRun:
             client.poll_run("run123", timeout_s=30, interval_s=1)
 
 
+@pytest.mark.usefixtures("enable_apify")
 class TestApifyClientFetchDatasetItems:
     """Tests for fetch_dataset_items method."""
 

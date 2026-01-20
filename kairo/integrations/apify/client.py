@@ -12,6 +12,11 @@ Endpoints per Apify API v2 docs (https://docs.apify.com/api/v2):
 - POST /v2/acts/{actorId}/runs - start actor run
 - GET /v2/actor-runs/{runId} - get run status
 - GET /v2/datasets/{datasetId}/items - fetch dataset items
+
+PR-0 GUARDRAILS:
+All API calls are guarded by require_apify_enabled() from kairo.core.guardrails.
+If APIFY_ENABLED=false (default), any API call raises ApifyDisabledError.
+This prevents accidental spend during development and testing.
 """
 
 from __future__ import annotations
@@ -21,8 +26,11 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from urllib.parse import quote
 
 import requests
+
+from kairo.core.guardrails import require_apify_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -110,17 +118,48 @@ class ApifyClient:
             RunInfo with initial run status
 
         Raises:
+            ApifyDisabledError: If APIFY_ENABLED=false (PR-0 guardrail)
             ApifyError: If API returns an error
         """
-        url = f"{self.base_url}/v2/acts/{actor_id}/runs"
-        logger.info("Starting actor run: actor_id=%s", actor_id)
+        # PR-0: Global kill switch - fail fast if Apify is disabled
+        require_apify_enabled()
+
+        # TASK-2 FIX: URL-encode actor_id to handle slashes (e.g., apify/instagram-scraper → apify%2Finstagram-scraper)
+        # Without encoding, "apify/instagram-scraper" becomes path segments instead of actor ID
+        encoded_actor_id = quote(actor_id, safe="")
+        url = f"{self.base_url}/v2/acts/{encoded_actor_id}/runs"
+
+        # TASK-2: Hard observability - log APIFY_CALL_START
+        call_start_ms = time.monotonic() * 1000
+        logger.info(
+            "APIFY_CALL_START actor_id=%s url=%s",
+            actor_id,
+            url,
+        )
 
         try:
             response = self._session.post(url, json=input_json, timeout=30)
+            duration_ms = int(time.monotonic() * 1000 - call_start_ms)
         except requests.RequestException as e:
+            duration_ms = int(time.monotonic() * 1000 - call_start_ms)
+            # TASK-2: Log APIFY_CALL_END with error
+            logger.error(
+                "APIFY_CALL_END actor_id=%s status=ERROR duration_ms=%d error=%s",
+                actor_id,
+                duration_ms,
+                str(e),
+            )
             raise ApifyError(f"Request failed: {e}") from e
 
         if not response.ok:
+            # TASK-2: Log APIFY_CALL_END with HTTP error
+            logger.error(
+                "APIFY_CALL_END actor_id=%s status=HTTP_ERROR duration_ms=%d http_status=%d error=%s",
+                actor_id,
+                duration_ms,
+                response.status_code,
+                response.text[:200],
+            )
             raise ApifyError(
                 f"Failed to start actor run: {response.status_code}",
                 status_code=response.status_code,
@@ -129,9 +168,13 @@ class ApifyClient:
 
         data = response.json().get("data", {})
         run_info = self._parse_run_info(data, actor_id)
+
+        # TASK-2: Log APIFY_CALL_END with success
         logger.info(
-            "Actor run started: run_id=%s, status=%s",
+            "APIFY_CALL_END actor_id=%s run_id=%s status=STARTED duration_ms=%d apify_status=%s",
+            actor_id,
             run_info.run_id,
+            duration_ms,
             run_info.status,
         )
         return run_info
@@ -154,9 +197,13 @@ class ApifyClient:
             RunInfo with final status
 
         Raises:
+            ApifyDisabledError: If APIFY_ENABLED=false (PR-0 guardrail)
             ApifyTimeoutError: If polling times out
             ApifyError: If API returns an error
         """
+        # PR-0: Global kill switch - fail fast if Apify is disabled
+        require_apify_enabled()
+
         url = f"{self.base_url}/v2/actor-runs/{run_id}"
         start_time = time.monotonic()
         logger.info("Polling run: run_id=%s, timeout_s=%d", run_id, timeout_s)
@@ -219,8 +266,12 @@ class ApifyClient:
             List of raw item dictionaries
 
         Raises:
+            ApifyDisabledError: If APIFY_ENABLED=false (PR-0 guardrail)
             ApifyError: If API returns an error
         """
+        # PR-0: Global kill switch - fail fast if Apify is disabled
+        require_apify_enabled()
+
         url = f"{self.base_url}/v2/datasets/{dataset_id}/items"
         params = {"limit": limit, "offset": offset}
         logger.info(
