@@ -16,7 +16,7 @@ Design constraints (per 05-llm-and-deepagents-conventions.md):
 
 Invariants the output must satisfy:
 - Each opportunity has non-empty title and angle
-- primary_channel is Channel.LINKEDIN or Channel.X
+- primary_channel is one of: LINKEDIN, X, INSTAGRAM, TIKTOK
 - score is in [0, 100]
 - type is a valid OpportunityType
 - 6-24 opportunities returned per run
@@ -84,7 +84,7 @@ class RawOpportunityIdea(BaseModel):
     title: str = Field(min_length=5, max_length=200)
     angle: str = Field(min_length=10, max_length=500)
     type: str = Field(description="One of: trend, evergreen, competitive, campaign")
-    primary_channel: str = Field(description="One of: linkedin, x")
+    primary_channel: str = Field(description="One of: linkedin, x, instagram, tiktok")
     suggested_channels: list[str] = Field(default_factory=list)
     reasoning: str = Field(
         default="", description="Brief explanation of why this opportunity matters"
@@ -218,7 +218,10 @@ REQUIREMENTS:
      - For competitive: reference competitor move or category shift
      - For campaign: reference the campaign moment
    - A type: trend (timely), evergreen (always relevant), competitive (differentiation), or campaign (planned initiative)
-   - A primary channel: linkedin or x (choose based on content type fit)
+   - A primary channel: linkedin, x, instagram, or tiktok (choose based on content type fit)
+     - Use tiktok/instagram for trend-driven, casual, visual, or meme-able content
+     - Use linkedin for professional insights and thought leadership
+     - Use x for quick takes and real-time commentary
 
 2. Mix of opportunity types:
    - At least 2 trend-based (responding to current signals)
@@ -309,7 +312,7 @@ def _synthesize_opportunities(
     # Learning context
     top_channels = (
         ", ".join(c.value for c in learning_summary.top_performing_channels)
-        or "linkedin, x (no preference data)"
+        or "linkedin, x, instagram, tiktok (no preference data)"
     )
     engagement_context = (
         f"Score: {learning_summary.recent_engagement_score:.1f}/100"
@@ -655,10 +658,12 @@ def _convert_to_draft_dtos(
         "campaign": OpportunityType.CAMPAIGN,
     }
 
-    # Channel mapping
+    # Channel mapping - supports all platforms
     channel_map = {
         "linkedin": Channel.LINKEDIN,
         "x": Channel.X,
+        "instagram": Channel.INSTAGRAM,
+        "tiktok": Channel.TIKTOK,
     }
 
     for opp in scored_opportunities:
@@ -682,7 +687,8 @@ def _convert_to_draft_dtos(
             if mapped:
                 suggested.append(mapped)
         if not suggested:
-            suggested = [Channel.LINKEDIN, Channel.X]
+            # Default to all supported channels if none specified
+            suggested = [Channel.LINKEDIN, Channel.X, Channel.INSTAGRAM, Channel.TIKTOK]
 
         # Per rubric §7.3: invalid opps get score=0
         if is_valid:
@@ -754,7 +760,7 @@ def graph_hero_generate_opportunities(
 
     Invariants:
         - Each opportunity has non-empty title (5+ chars) and angle (10+ chars)
-        - primary_channel is Channel.LINKEDIN or Channel.X
+        - primary_channel is one of: LINKEDIN, X, INSTAGRAM, TIKTOK
         - score is in [0, 100]
         - type is a valid OpportunityType
         - Returns 6-24 opportunities (may be fewer if many taboo violations)

@@ -76,15 +76,38 @@ def build_ig_hashtag_input(seed_pack: "SeedPack") -> dict:
     Build Instagram hashtag search input.
 
     Per PRD B.2.1: Stage 1 discovery (cheap, wide).
-    Uses seed_keywords to construct hashtag searches.
+
+    QUERY PLANNER INTEGRATION:
+    - Uses seed_pack.instagram_hashtags (LLM-generated semantic probes)
+    - Falls back to _extract_primary_keyword if query plan is empty
+
+    Instagram Scraper API:
+    - search: The hashtag to search for
+    - searchType: "hashtag" for hashtag search
+    - resultsLimit: Max posts to return
+    - searchLimit: Number of hashtags to search (we use 1 at a time)
     """
-    # Extract first keyword for hashtag search
-    hashtag = _extract_primary_keyword(seed_pack)
+    # Use Query Planner output if available
+    if seed_pack.instagram_hashtags:
+        # Use first hashtag as the search term
+        hashtag = seed_pack.instagram_hashtags[0]
+        logger.info(
+            "IG_INPUT_BUILDER recipe=IG-1 source=QUERY_PLANNER hashtags=%s",
+            seed_pack.instagram_hashtags[:3],
+        )
+    else:
+        # Fallback to deterministic builder
+        hashtag = _extract_primary_keyword(seed_pack) or "trending"
+        logger.warning(
+            "IG_INPUT_BUILDER recipe=IG-1 source=FALLBACK hashtag=%s",
+            hashtag,
+        )
 
     return {
-        "hashtags": [hashtag] if hashtag else ["trending"],
-        "resultsLimit": 20,  # Our cap, will be applied via budget.apply_caps_to_input
-        "searchLimit": 1,
+        "search": hashtag,  # The hashtag to search for
+        "searchType": "hashtag",  # Required for hashtag search
+        "resultsLimit": 20,  # Max posts to return
+        "searchLimit": 1,  # How many hashtags to search
     }
 
 
@@ -107,12 +130,38 @@ def build_ig_search_input(seed_pack: "SeedPack") -> dict:
     """
     Build Instagram search query input.
 
-    Uses positioning text to construct search queries.
+    QUERY PLANNER INTEGRATION:
+    - Uses seed_pack.instagram_queries (LLM-generated semantic probes)
+    - Falls back to _extract_search_query if query plan is empty
+
+    Instagram Scraper API:
+    - search: Search query
+    - searchType: "hashtag" works better for topic discovery than "user"
+    - resultsLimit: Max posts to return
+    - searchLimit: Number of results to search
     """
-    query = _extract_search_query(seed_pack)
+    # Use Query Planner output if available
+    if seed_pack.instagram_queries:
+        query = seed_pack.instagram_queries[0]  # Use first query
+        logger.info(
+            "IG_INPUT_BUILDER recipe=IG-3 source=QUERY_PLANNER query=%s",
+            query,
+        )
+    else:
+        # Fallback to deterministic builder
+        query = _extract_search_query(seed_pack)
+        logger.warning(
+            "IG_INPUT_BUILDER recipe=IG-3 source=FALLBACK query=%s",
+            query,
+        )
+
+    # Convert query to hashtag-friendly format (remove spaces, lowercase)
+    # Instagram search works better with hashtag-style queries
+    hashtag_query = query.lower().replace(" ", "")
 
     return {
-        "search": query,
+        "search": hashtag_query,
+        "searchType": "hashtag",  # Required - hashtag search gets better results
         "resultsLimit": 20,
         "searchLimit": 1,
     }
@@ -196,38 +245,61 @@ def build_tt_hashtag_input(seed_pack: "SeedPack") -> dict:
 
     Per PRD B.2.2: Single-stage, semantically rich.
 
-    TASK-2: Encode freshness into actor inputs:
-    - oldestPostDateUnified: Only posts from last 5 days (staleness gate requires < 7)
-    - searchQueries: Use targeted queries for better relevance
-    - shouldDownloadSubtitles: Enable transcript extraction
+    QUERY PLANNER INTEGRATION:
+    - Uses seed_pack.tiktok_queries (LLM-generated semantic search probes)
+    - Falls back to _build_tiktok_search_queries if query plan is empty
 
-    NOTE: TikTok scraper does NOT allow date + popularity filters together.
-    We prioritize freshness (date filter) over engagement (popularity filter)
-    because the staleness gate is a hard requirement.
+    TikTok Scraper search options (per apify_actor_samples.md):
+    - searchQueries: Keywords to search for videos
+    - searchSection: "Video" to search videos (not profiles)
+    - searchSorting: "0" = Most relevant, "1" = Most liked, "2" = Latest
+    - searchDatePosted: Date range filter ("0"=all, "1"=24h, "2"=week, "3"=month, etc.)
+
+    NOTE: Cannot combine searchSorting with leastDiggs (popularity filter).
+    We prioritize freshness over engagement because staleness gate is hard requirement.
     """
-    # Calculate freshness cutoff date (5 days ago)
+    # Use Query Planner output if available (preferred - semantic search probes)
+    if seed_pack.tiktok_queries:
+        search_queries = seed_pack.tiktok_queries[:3]  # Max 3 queries
+        logger.info(
+            "TIKTOK_INPUT_BUILDER recipe=TT-1 source=QUERY_PLANNER queries=%s",
+            search_queries,
+        )
+    else:
+        # Fallback to deterministic builder (legacy - will produce worse results)
+        search_queries = _build_tiktok_search_queries(seed_pack)
+        logger.warning(
+            "TIKTOK_INPUT_BUILDER recipe=TT-1 source=FALLBACK queries=%s (Query Planner not available)",
+            search_queries,
+        )
+
+    # Calculate freshness cutoff date using the constant (passes staleness gate)
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=TIKTOK_MAX_AGE_DAYS)
     oldest_date_str = cutoff_date.strftime("%Y-%m-%d")
 
-    # Build targeted search queries from seed pack
-    search_queries = _build_tiktok_search_queries(seed_pack)
-
     logger.info(
-        "TIKTOK_INPUT_BUILDER recipe=TT-1 oldest_date=%s queries=%s",
+        "TIKTOK_INPUT_BUILDER recipe=TT-1 oldest_date=%s sorting=most_liked",
         oldest_date_str,
-        search_queries,
     )
 
+    # Strategy: VIRAL content from the LAST N DAYS
+    # - oldestPostDateUnified: Hard date filter (only posts after this date)
+    # - searchSorting: "1" (Most liked) to get viral/trending content
+    # This combination ensures we get HIGH-ENGAGEMENT content that's also FRESH.
     return {
-        # Use searchQueries for better targeting (not just hashtags)
+        # Use searchQueries for keyword search
         "searchQueries": search_queries,
         "resultsPerPage": 15,  # Our cap
-        # Freshness constraint: only posts from last 5 days
-        # NOTE: Cannot combine with leastDiggs (popularity filter) - TikTok API limitation
+        # Search in Video section (not profiles) - MUST be "/video" per Apify schema
+        "searchSection": "/video",
+        # Sort: "0"=Most relevant, "1"=Most liked, "3"=Newest
+        # NOTE: "2" is NOT valid - actor only accepts 0, 1, 3
+        # Use "1" (Most liked) to get VIRAL content
+        "searchSorting": "1",
+        # Hard date filter: only posts from last N days (passes staleness gate)
         "oldestPostDateUnified": oldest_date_str,
         # Transcript extraction
         "shouldDownloadSubtitles": True,
-        "subtitlesLanguage": "en",
     }
 
 
@@ -235,14 +307,15 @@ def build_tt_profile_input(seed_pack: "SeedPack") -> dict:
     """
     Build TikTok profile videos input.
 
-    TASK-2: Encode freshness into actor inputs:
-    - oldestPostDateUnified: Only posts from last 5 days
+    For profile scraping:
     - profileSorting: "latest" to get newest content first
+    - oldestPostDateUnified: Filter to recent posts (this works for profiles)
+    - excludePinnedPosts: Skip pinned posts which may be old
     """
     username = seed_pack.brand_name.lower().replace(" ", "")
 
-    # Calculate freshness cutoff date
-    cutoff_date = datetime.now(timezone.utc) - timedelta(days=TIKTOK_MAX_AGE_DAYS)
+    # Calculate freshness cutoff date (7 days to pass staleness gate)
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=7)
     oldest_date_str = cutoff_date.strftime("%Y-%m-%d")
 
     logger.info(
@@ -254,13 +327,14 @@ def build_tt_profile_input(seed_pack: "SeedPack") -> dict:
     return {
         "profiles": [username],
         "resultsPerPage": 10,
-        # Freshness constraint
-        "oldestPostDateUnified": oldest_date_str,
         # Sort by latest to prioritize recent content
         "profileSorting": "latest",
+        # Freshness constraint (works for profile scraping)
+        "oldestPostDateUnified": oldest_date_str,
+        # Skip pinned posts (often old)
+        "excludePinnedPosts": True,
         # Transcript extraction
         "shouldDownloadSubtitles": True,
-        "subtitlesLanguage": "en",
     }
 
 
@@ -488,7 +562,8 @@ RECIPE_REGISTRY: dict[str, RecipeSpec] = {
 
 # Default execution plan for POST /regenerate
 # Per PRD G.1.2: Recipe priority order: IG-1 → IG-3 → TT-1
-DEFAULT_EXECUTION_PLAN = ["IG-1", "IG-3", "TT-1"]
+# NOTE: TT-1 temporarily disabled (TikTok scraper requires more Apify credits)
+DEFAULT_EXECUTION_PLAN = ["IG-1", "IG-3"]  # Original: ["IG-1", "IG-3", "TT-1"]
 
 
 def get_recipe(recipe_id: str) -> RecipeSpec | None:

@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 def derive_seed_pack(
     brand_id: UUID,
     snapshot_id: UUID | None = None,
+    *,
+    use_query_planner: bool = True,
 ) -> SeedPack:
     """
     Derive SeedPack from brand data (BrandBrainSnapshot).
@@ -43,14 +45,21 @@ def derive_seed_pack(
     - Deterministic derivation from snapshot
     - Contains search terms, pillar keywords, persona contexts
 
+    QUERY PLANNER INTEGRATION:
+    - When use_query_planner=True, calls LLM to generate semantic search probes
+    - Probes are stored in tiktok_queries, instagram_queries, etc.
+    - Recipes use these instead of naive brand-name searches
+
     Args:
         brand_id: UUID of the brand
         snapshot_id: Optional snapshot ID (uses latest if None)
+        use_query_planner: Whether to use LLM query planning (default True)
 
     Returns:
-        SeedPack instance
+        SeedPack instance with query plan populated
     """
     from kairo.core.models import Brand
+    from kairo.brandbrain.models import BrandBrainSnapshot
 
     # Load brand
     brand = Brand.objects.get(id=brand_id)
@@ -74,10 +83,9 @@ def derive_seed_pack(
     for persona in brand.personas.all():
         persona_contexts.append(f"{persona.name}: {persona.summary[:100] if persona.summary else ''}")
 
-    # Try to get snapshot ID if not provided
+    # Get latest snapshot
+    latest_snapshot = None
     if snapshot_id is None:
-        from kairo.brandbrain.models import BrandBrainSnapshot
-
         latest_snapshot = (
             BrandBrainSnapshot.objects.filter(brand_id=brand_id)
             .order_by("-created_at")
@@ -85,6 +93,58 @@ def derive_seed_pack(
         )
         if latest_snapshot:
             snapshot_id = latest_snapshot.id
+    else:
+        latest_snapshot = BrandBrainSnapshot.objects.filter(id=snapshot_id).first()
+
+    # Initialize Query Planner outputs
+    tiktok_queries = []
+    tiktok_hashtags = []
+    instagram_queries = []
+    instagram_hashtags = []
+    query_plan_error = None
+
+    # Call Query Planner if enabled and snapshot exists
+    if use_query_planner and latest_snapshot:
+        try:
+            from kairo.sourceactivation.query_planner import generate_query_plan
+
+            logger.info(
+                "DERIVE_SEED_PACK calling Query Planner for brand_id=%s",
+                brand_id,
+            )
+
+            query_plan = generate_query_plan(
+                brand_id=str(brand_id),
+                snapshot_json=latest_snapshot.snapshot_json,
+                model="fast",  # Use fast model for query planning
+            )
+
+            if query_plan.error:
+                logger.warning(
+                    "Query Planner failed for brand_id=%s: %s",
+                    brand_id,
+                    query_plan.error,
+                )
+                query_plan_error = query_plan.error
+            else:
+                tiktok_queries = query_plan.get_tiktok_queries()
+                tiktok_hashtags = query_plan.get_tiktok_hashtags()
+                instagram_queries = query_plan.get_instagram_queries()
+                instagram_hashtags = query_plan.get_instagram_hashtags()
+
+                logger.info(
+                    "Query Planner succeeded: tiktok_queries=%s instagram_queries=%s",
+                    tiktok_queries,
+                    instagram_queries,
+                )
+
+        except Exception as e:
+            logger.exception(
+                "Query Planner exception for brand_id=%s: %s",
+                brand_id,
+                str(e),
+            )
+            query_plan_error = str(e)
 
     return SeedPack(
         brand_id=brand_id,
@@ -94,6 +154,12 @@ def derive_seed_pack(
         pillar_keywords=pillar_keywords,
         persona_contexts=persona_contexts,
         snapshot_id=snapshot_id,
+        # Query Planner outputs
+        tiktok_queries=tiktok_queries,
+        tiktok_hashtags=tiktok_hashtags,
+        instagram_queries=instagram_queries,
+        instagram_hashtags=instagram_hashtags,
+        query_plan_error=query_plan_error,
     )
 
 

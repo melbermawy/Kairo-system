@@ -376,6 +376,7 @@ def _build_brand_snapshot(brand: Brand) -> BrandSnapshotDTO:
     Build a BrandSnapshotDTO from a Brand model.
 
     Loads related personas and pillars from DB.
+    Also extracts cta_policy and content_goal from BrandBrainSnapshot if available.
     """
     # Load personas
     personas = []
@@ -407,14 +408,72 @@ def _build_brand_snapshot(brand: Brand) -> BrandSnapshotDTO:
             )
         )
 
+    # Extract cta_policy and content_goal from BrandBrainSnapshot
+    # These fields are in snapshot_json.voice.cta_policy and snapshot_json.meta.content_goal
+    cta_policy = "soft"  # default
+    content_goal = None
+    voice_tone_tags = brand.tone_tags or []
+    taboos = brand.taboos or []
+
+    try:
+        # Import here to avoid circular dependency
+        from kairo.brandbrain.models import BrandBrainSnapshot
+
+        snapshot = BrandBrainSnapshot.objects.filter(brand=brand).order_by("-created_at").first()
+        if snapshot and snapshot.snapshot_json:
+            data = snapshot.snapshot_json
+
+            # Extract cta_policy from voice section
+            voice = data.get("voice", {})
+            cta_policy_field = voice.get("cta_policy", {})
+            if isinstance(cta_policy_field, dict):
+                cta_policy = cta_policy_field.get("value", "soft")
+            elif isinstance(cta_policy_field, str):
+                cta_policy = cta_policy_field
+
+            # Extract content_goal from meta section
+            meta = data.get("meta", {})
+            content_goal_field = meta.get("content_goal", {})
+            if isinstance(content_goal_field, dict):
+                content_goal = content_goal_field.get("value")
+            elif isinstance(content_goal_field, str):
+                content_goal = content_goal_field
+
+            # Also get tone_tags and taboos from snapshot if richer than Brand model
+            snapshot_tone_tags = voice.get("tone_tags", [])
+            if snapshot_tone_tags and len(snapshot_tone_tags) > len(voice_tone_tags):
+                voice_tone_tags = snapshot_tone_tags
+
+            snapshot_taboos = voice.get("taboos", [])
+            if snapshot_taboos and len(snapshot_taboos) > len(taboos):
+                taboos = snapshot_taboos
+
+            # Also extract pillars from snapshot if Brand model has none
+            if not pillars:
+                content_section = data.get("content", {})
+                content_pillars = content_section.get("content_pillars", [])
+                for i, p in enumerate(content_pillars):
+                    pillars.append(
+                        PillarDTO(
+                            id=uuid4(),  # Generate synthetic ID
+                            name=p.get("name", f"Pillar {i+1}"),
+                            description=p.get("description", ""),
+                        )
+                    )
+    except Exception as e:
+        # Log but don't fail - we have defaults
+        logger.warning(f"Failed to extract snapshot fields: {e}")
+
     return BrandSnapshotDTO(
         brand_id=brand.id,
         brand_name=brand.name,
         positioning=brand.positioning or None,
         pillars=pillars,
         personas=personas,
-        voice_tone_tags=brand.tone_tags or [],
-        taboos=brand.taboos or [],
+        voice_tone_tags=voice_tone_tags,
+        taboos=taboos,
+        cta_policy=cta_policy,
+        content_goal=content_goal,
     )
 
 

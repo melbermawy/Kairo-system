@@ -192,6 +192,11 @@ def execute_recipe(
             stage=1,
             run_id=run_id,
         )
+
+        # NOTE: Relevancy filtering now done at scrape time via:
+        # - TikTok: searchSorting="1" (Most liked) + oldestPostDateUnified (date filter)
+        # This gives us viral content from the last N days without post-scrape filtering.
+
         stage1_count = len(stage1_items)
         all_items.extend(stage1_items)
 
@@ -245,6 +250,7 @@ def execute_recipe(
                         stage=2,
                         run_id=run_id,
                     )
+
                     stage2_count = len(stage2_items)
 
                     # Merge: Stage 2 items replace Stage 1 items with same URL
@@ -515,3 +521,8 @@ def _log_freshness_diagnostics(recipe_id: str, items: list[EvidenceItemData]) ->
         median,
         fresh_count,
     )
+
+
+# NOTE: Relevancy filtering removed - now done at scrape time via Apify inputs:
+# - TikTok: searchSorting="1" (Most liked) + oldestPostDateUnified (date filter)
+# This ensures we only scrape viral content from the last N days.

@@ -135,7 +135,7 @@ class OpportunityKernel(BaseModel):
     """
     core_idea: str = Field(min_length=10, max_length=300, description="The core content opportunity idea (max 300 chars)")
     type: str = Field(description="One of: trend, evergreen, competitive, campaign")
-    primary_channel: str = Field(description="One of: linkedin, x")
+    primary_channel: str = Field(description="One of: linkedin, x, instagram, tiktok")
     timing_hook: str = Field(min_length=5, max_length=200, description="What just happened / why now (max 200 chars)")
     confidence: float = Field(ge=0.0, le=1.0, description="0-1 confidence score")
 
@@ -168,8 +168,8 @@ class ExpandedOpportunity(BaseModel):
     angle: str = Field(min_length=20, max_length=800, description="The core thesis/hook")
     why_now: str = Field(min_length=30, max_length=1500, description="Rich paragraph explanation of timing")
     type: str = Field(default="evergreen", description="One of: trend, evergreen, competitive, campaign")
-    primary_channel: str = Field(default="linkedin", description="One of: linkedin, x")
-    suggested_channels: list[str] = Field(default_factory=lambda: ["linkedin", "x"])
+    primary_channel: str = Field(default="linkedin", description="One of: linkedin, x, instagram, tiktok")
+    suggested_channels: list[str] = Field(default_factory=lambda: ["linkedin", "x", "instagram", "tiktok"])
     persona_hint: str | None = None
     pillar_hint: str | None = None
 
@@ -203,31 +203,38 @@ class ScoringOutput(BaseModel):
 # =============================================================================
 
 # Stage 1: Kernel generation (one per evidence item or cluster)
-KERNEL_SYSTEM_PROMPT = """You extract content opportunities from evidence.
+KERNEL_SYSTEM_PROMPT = """You extract content IDEAS from trending evidence for a brand.
 Brand: {brand_name}
 Positioning: {positioning}
 TABOOS (never suggest): {taboos}
 
+You are NOT writing marketing copy. You are identifying what content a real creator would make.
+Think: "what would make someone stop scrolling?" not "what would a marketer pitch?"
+
 Output ONLY a JSON object with a single "kernel" field. No prose. No explanations."""
 
-KERNEL_USER_PROMPT = """From this evidence, propose ONE opportunity kernel.
+KERNEL_USER_PROMPT = """From this evidence, propose ONE content idea kernel.
 
 EVIDENCE:
 Platform: {platform}
 Author: {author}
 Text: {text_snippet}
 
-CRITICAL: Keep fields SHORT:
-- core_idea: max 80 words, be concise
-- timing_hook: max 40 words
+CRITICAL: Keep fields SHORT and NATIVE to the platform:
+- core_idea: max 60 words. Write it like a creator would describe their video idea to a friend, NOT like a marketing brief.
+  BAD: "Create a TikTok series showing how brands can optimize..."
+  GOOD: "POV: you ask ChatGPT for product recs and it only mentions brands that did this one thing"
+- timing_hook: max 30 words. Why would someone care RIGHT NOW?
+- primary_channel: match the evidence platform if it's tiktok/instagram. Only use linkedin/x if the content is genuinely better suited there.
 
 Output format:
-{{"kernel":{{"core_idea":"short idea max 80 words","type":"trend|evergreen|competitive|campaign","primary_channel":"linkedin|x","timing_hook":"short hook max 40 words","confidence":0.0-1.0,"evidence_indices":[{evidence_idx}]}}}}"""
+{{"kernel":{{"core_idea":"creator-style idea description","type":"trend|evergreen|competitive|campaign","primary_channel":"linkedin|x|instagram|tiktok","timing_hook":"why now","confidence":0.0-1.0,"evidence_indices":[{evidence_idx}]}}}}"""
 
 # Stage 2: Consolidation
-CONSOLIDATION_SYSTEM_PROMPT = """You deduplicate and select the best opportunity kernels.
+CONSOLIDATION_SYSTEM_PROMPT = """You deduplicate and select the best content idea kernels.
 Brand: {brand_name}
 Keep 5-8 strongest, most diverse kernels. Merge near-duplicates.
+Prefer ideas that feel native to their platform, not marketing campaigns dressed as content.
 Output ONLY JSON with "kernels" array. No prose."""
 
 CONSOLIDATION_USER_PROMPT = """Select the 5-8 best kernels from these candidates:
@@ -237,21 +244,35 @@ CONSOLIDATION_USER_PROMPT = """Select the 5-8 best kernels from these candidates
 Rules:
 - Merge semantically similar ideas (keep highest confidence)
 - Ensure type diversity (at least 1 trend, 1 evergreen)
-- Prefer higher confidence kernels
+- Prefer ideas that sound like something a creator would actually post, not a brand campaign
+- Reject ideas that sound like marketing playbooks
 
 Output: {{"kernels":[...]}}"""
 
 # Stage 3: Expansion (this is where rich prose lives)
-EXPANSION_SYSTEM_PROMPT = """You are a content strategist for {brand_name}.
-Expand opportunity kernels into compelling, detailed opportunities.
+EXPANSION_SYSTEM_PROMPT = """You help {brand_name} develop content ideas into full opportunities.
 
 Brand context:
 - Positioning: {positioning}
-- Voice/Tone: {tone_tags}
 - Pillars: {pillars}
-- Personas: {personas}
+- Content goal: {content_goal}
 
-Write flowing paragraphs, NOT bullet points. Be specific and grounded in evidence."""
+VOICE/TONE: {tone_tags}
+
+CTA POLICY: {cta_policy}
+- "none": This brand NEVER sells in content. Pure value, entertainment, or community. No CTAs, no "link in bio", no "DM me".
+- "soft": Value-first. Occasional soft mentions are OK but most content should stand alone without any ask.
+- "direct": Clear CTAs are fine when relevant, but content should still be valuable without them.
+- "aggressive": Every piece drives action. Fine to be sales-forward.
+
+PLATFORM-NATIVE VOICE ({primary_channel}):
+- TikTok: casual, raw, trend-aware, slightly chaotic energy. "POV:", "wait for it", hooks that stop the scroll. No corporate polish.
+- Instagram: aesthetic but authentic. Can be polished but should feel personal, not produced. Carousel = teaching moment, Reel = entertainment or hot take.
+- LinkedIn: professional but not boring. Hot takes welcome but grounded. "I've been thinking about..." or "Unpopular opinion:" energy.
+- X: punchy, provocative, thread-worthy. One strong take per post. Quote-tweet energy.
+
+IMPORTANT: Write opportunities that a creator would actually want to make, not marketing campaigns.
+The title should sound like something you'd see in your feed and stop to watch, not a pitch deck slide."""
 
 EXPANSION_USER_PROMPT = """Expand this kernel into a full opportunity.
 
@@ -262,22 +283,37 @@ SUPPORTING EVIDENCE:
 {evidence_text}
 
 Create a JSON object with these REQUIRED fields:
-- title: compelling, specific title (max 200 chars)
-- angle: the core thesis (2-3 sentences, max 600 chars)
-- why_now: flowing paragraph explaining timing (3-5 sentences, grounded in evidence)
+- title: How a creator would describe this video/post to a friend. NOT a marketing headline.
+  BAD: "Leverage AI Search Trends to Optimize Brand Visibility"
+  GOOD: "that satisfying moment when ChatGPT recommends YOUR product"
+  GOOD: "POV: you're a brand that actually shows up in AI search"
+  GOOD: "I tested what makes ChatGPT recommend products. here's what I found."
+- angle: The hook/thesis in 2-3 sentences. What's the actual insight or entertainment value? (max 500 chars)
+- why_now: Why would this resonate RIGHT NOW? Ground it in the evidence. (2-3 sentences)
 - type: copy from kernel (trend/evergreen/competitive/campaign)
-- primary_channel: copy from kernel (linkedin/x)
-- suggested_channels: array like ["linkedin", "x"]
+- primary_channel: MUST match the kernel's primary_channel
+- suggested_channels: 2-3 channels, primary_channel first
+
+REMEMBER THE CTA POLICY ({cta_policy}):
+- If "none" or "soft": The opportunity should deliver value WITHOUT any sales angle. Don't frame it as "how to get customers to..."
+- The angle should be interesting to the AUDIENCE, not just useful for the BRAND.
 
 Output ONLY JSON:
-{{"opportunity":{{"title":"...","angle":"...","why_now":"...","type":"...","primary_channel":"...","suggested_channels":["linkedin","x"]}}}}"""
+{{"opportunity":{{"title":"...","angle":"...","why_now":"...","type":"...","primary_channel":"...","suggested_channels":["..."]}}}}"""
 
 # Stage 4: Scoring
 SCORING_SYSTEM_PROMPT = """Score opportunities for {brand_name}.
 TABOOS: {taboos}
+CTA POLICY: {cta_policy}
 
-Rubric: relevance 0-30, timeliness 0-25, audience 0-25, channel 0-20.
-Band: invalid=0 (taboo), weak=1-64, strong=65-100."""
+Rubric:
+- Platform-native (0-25): Does this sound like real content for this platform, or marketing dressed up?
+- Audience value (0-25): Would the target audience find this genuinely interesting/useful/entertaining?
+- Timeliness (0-25): Is the timing hook compelling? Does the evidence support "why now"?
+- Brand fit (0-25): Does it align with positioning and pillars without feeling like an ad?
+
+CRITICAL: If CTA policy is "none" or "soft", penalize opportunities that feel sales-forward or have implicit CTAs.
+Band: invalid=0 (taboo or wrong CTA tone), weak=1-64, strong=65-100."""
 
 SCORING_USER_PROMPT = """Score these opportunities:
 
@@ -335,7 +371,24 @@ def _generate_single_kernel(
         )
 
         result = parse_structured_output(response.raw_text, KernelGenerationOutput)
-        return result.kernel
+        kernel = result.kernel
+
+        # Post-process: If evidence is from TikTok/Instagram with high engagement,
+        # prefer that platform for trend-driven content
+        evidence_platform = evidence_item.platform.lower()
+        if evidence_platform in ("tiktok", "instagram"):
+            # Check if this looks like trend content (type=trend or high view count)
+            is_trendy = kernel.type == "trend" or (evidence_item.view_count and evidence_item.view_count > 10000)
+            if is_trendy and kernel.primary_channel in ("linkedin", "x"):
+                # Override to match evidence platform for trend content
+                kernel.primary_channel = evidence_platform
+                logger.debug(
+                    "Overrode channel to %s for trendy evidence from %s",
+                    evidence_platform,
+                    evidence_platform,
+                )
+
+        return kernel
 
     except (LLMCallError, StructuredOutputError) as e:
         logger.warning(
@@ -509,15 +562,19 @@ def _expand_single_kernel(
 
         # Compact snapshot info
         pillars = ", ".join(p.name for p in brand_snapshot.pillars[:3]) or "None"
-        personas = ", ".join(p.name for p in brand_snapshot.personas[:3]) or "None"
         tone = ", ".join(brand_snapshot.voice_tone_tags[:4]) or "professional"
+        cta_policy = brand_snapshot.cta_policy or "soft"
+        content_goal = brand_snapshot.content_goal or "Build brand awareness and engagement"
+        primary_channel = kernel.primary_channel.lower() if kernel.primary_channel else "tiktok"
 
         system_prompt = EXPANSION_SYSTEM_PROMPT.format(
             brand_name=brand_snapshot.brand_name,
             positioning=(brand_snapshot.positioning or "Not specified")[:300],
             tone_tags=tone,
             pillars=pillars,
-            personas=personas,
+            content_goal=content_goal,
+            cta_policy=cta_policy,
+            primary_channel=primary_channel,
         )
 
         kernel_json = {
@@ -530,6 +587,7 @@ def _expand_single_kernel(
         user_prompt = EXPANSION_USER_PROMPT.format(
             kernel_json=str(kernel_json),
             evidence_text=evidence_text,
+            cta_policy=cta_policy,
         )
 
         response = llm_client.call(
@@ -562,7 +620,12 @@ def _expand_single_kernel(
             if "primary_channel" not in opp_data or not opp_data["primary_channel"]:
                 opp_data["primary_channel"] = kernel.primary_channel
             if "suggested_channels" not in opp_data or not opp_data["suggested_channels"]:
-                opp_data["suggested_channels"] = ["linkedin", "x"]
+                # Default to kernel's primary_channel + complementary channels
+                primary = kernel.primary_channel.lower() if kernel.primary_channel else "linkedin"
+                if primary in ("tiktok", "instagram"):
+                    opp_data["suggested_channels"] = [primary, "instagram" if primary == "tiktok" else "tiktok", "x"]
+                else:
+                    opp_data["suggested_channels"] = [primary, "x", "linkedin"]
 
             # Validate with filled data
             return ExpandedOpportunity.model_validate(opp_data)
@@ -756,6 +819,7 @@ def stage4_score_opportunities(
     system_prompt = SCORING_SYSTEM_PROMPT.format(
         brand_name=brand_snapshot.brand_name,
         taboos=", ".join(brand_snapshot.taboos[:5]) or "None",
+        cta_policy=brand_snapshot.cta_policy or "soft",
     )
 
     user_prompt = SCORING_USER_PROMPT.format(
@@ -954,11 +1018,14 @@ def _convert_to_drafts(
     channel_map = {
         "linkedin": Channel.LINKEDIN,
         "x": Channel.X,
+        "instagram": Channel.INSTAGRAM,
+        "tiktok": Channel.TIKTOK,
     }
 
     drafts = []
     for opp, score, is_valid, rejection_reason in scored:
         opp_type = type_map.get(opp.type.lower(), OpportunityType.EVERGREEN)
+        # Map channel - default to LinkedIn only if truly unknown
         primary_channel = channel_map.get(opp.primary_channel.lower(), Channel.LINKEDIN)
 
         suggested_channels = []
@@ -967,7 +1034,8 @@ def _convert_to_drafts(
             if mapped:
                 suggested_channels.append(mapped)
         if not suggested_channels:
-            suggested_channels = [Channel.LINKEDIN, Channel.X]
+            # Include all platforms in suggested channels
+            suggested_channels = [Channel.LINKEDIN, Channel.X, Channel.INSTAGRAM, Channel.TIKTOK]
 
         rejection_reasons = [rejection_reason] if rejection_reason else []
 

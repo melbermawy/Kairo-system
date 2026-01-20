@@ -116,6 +116,13 @@ class BrandSnapshotDTO(BaseModel):
     voice_tone_tags: list[str] = Field(default_factory=list)
     taboos: list[str] = Field(default_factory=list)
 
+    # Social presence nuance (PR-X: CTA and content goal awareness)
+    # cta_policy: none = never sell, soft = value-first occasional soft CTA,
+    #             direct = clear CTAs ok, aggressive = every post drives action
+    cta_policy: Literal["none", "soft", "direct", "aggressive"] = "soft"
+    # content_goal: what the brand wants to achieve with content
+    content_goal: str | None = None
+
 
 # =============================================================================
 # EVIDENCE PREVIEW DTO (PR-5)

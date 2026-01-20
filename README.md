@@ -2,36 +2,25 @@
 
 AI-native content copilot for brands and content teams.
 
-This repo contains the **backend system** (Django + PostgreSQL + future LLM orchestration).
+This repo contains the **backend system** (Django + PostgreSQL + Redis + LLM orchestration).
 
 ## Quick Start
 
 ### Prerequisites
 
-- Docker and Docker Compose
-- Python 3.11+ (for local development without Docker)
+- Python 3.11+
+- PostgreSQL (or use our hosted Supabase instance)
+- Redis (for job queue)
+- OpenAI API key
+- Apify API token (for social media scraping)
 
-### Using Docker (Recommended)
-
-```bash
-# Start all services (postgres + django)
-docker-compose up
-
-# Or run in detached mode
-docker-compose up -d
-
-# View logs
-docker-compose logs -f web
-
-# Stop all services
-docker-compose down
-```
-
-The API will be available at `http://localhost:8000`.
-
-### Local Development (without Docker)
+### Installation
 
 ```bash
+# Clone the repo
+git clone https://github.com/melbermawy/kairo-backend.git
+cd kairo-backend
+
 # Create virtual environment
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
@@ -39,9 +28,9 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # Install dependencies
 pip install -e ".[dev]"
 
-# Set up environment variables
+# Create environment file
 cp .env.example .env
-# Edit .env with your DATABASE_URL (requires local postgres)
+# Edit .env with your settings (see Environment Variables below)
 
 # Run migrations
 python manage.py migrate
@@ -50,62 +39,156 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-### Running Tests
+The API will be available at `http://localhost:8000`.
+
+### Environment Variables
+
+Create a `.env` file in the root directory:
 
 ```bash
-# With Docker
-docker-compose exec web pytest
+# Database (PostgreSQL connection string)
+# You can use our shared Supabase instance or your own PostgreSQL
+DATABASE_URL=postgresql://user:password@host:port/database
 
-# Local (uses sqlite in-memory)
-pytest
+# Django secret key (generate a random string for production)
+DJANGO_SECRET_KEY=your-secret-key-here
+
+# OpenAI API key (REQUIRED - get one at https://platform.openai.com/api-keys)
+OPENAI_API_KEY=sk-proj-your-key-here
+
+# LLM Models (defaults shown)
+KAIRO_LLM_MODEL_FAST=gpt-4o-mini
+KAIRO_LLM_MODEL_HEAVY=gpt-4o
+
+# Apify (for social media scraping)
+APIFY_TOKEN=apify_api_your-token-here
+APIFY_ENABLED=true
+APIFY_DAILY_SPEND_CAP_USD=3.00
+
+# SourceActivation mode
+# - fixture_only: Use local fixture data (no Apify spend)
+# - live_cap_limited: Use Apify with daily spend cap
+SOURCEACTIVATION_MODE_DEFAULT=live_cap_limited
+
+# Redis (for job queue)
+REDIS_URL=redis://localhost:6379/0
 ```
+
+## Running the Full Stack
+
+Kairo requires three processes running:
+
+### 1. Django Server (API)
+
+```bash
+python manage.py runserver
+```
+
+### 2. Redis (Job Queue)
+
+```bash
+# macOS
+brew services start redis
+# Or run directly
+redis-server
+
+# Linux
+sudo systemctl start redis
+# Or run directly
+redis-server
+```
+
+### 3. Opportunities Worker (Background Jobs)
+
+```bash
+python -m kairo.hero.queues.opportunities_worker
+```
+
+This worker processes opportunity generation jobs (scraping + synthesis).
 
 ## Project Structure
 
 ```
-kairo/                  # Django project
-  settings.py           # App configuration (env-driven)
-  urls.py               # URL routing
-  hero/                 # Hero loop app (today board, packages, variants)
-    views.py            # API endpoints
-    urls.py             # App routes
+kairo/
+├── settings.py              # Django settings (env-driven)
+├── urls.py                  # URL routing
+├── hero/                    # Hero loop app
+│   ├── views.py             # API endpoints
+│   ├── models/              # Django models
+│   ├── engines/             # Business logic
+│   ├── graphs/              # LLM pipelines
+│   └── queues/              # Job queue workers
+├── sourceactivation/        # Social media scraping
+│   ├── query_planner.py     # LLM-powered query generation
+│   └── recipes/             # Platform-specific scrapers
+└── integrations/
+    └── apify/               # Apify API client
 
-tests/                  # Pytest test suite
-  test_healthcheck.py   # Basic smoke tests
-
-docs/                   # Documentation
-  prd/                  # Product requirements
-  technical/            # Architecture docs
-  engines/              # Engine specifications
+tests/                       # Pytest test suite
+docs/                        # Documentation
 ```
 
-## Documentation
+## Key Features
 
-- [docs/README.md](docs/README.md) - Documentation index
-- [docs/prd/kairo-v1-prd.md](docs/prd/kairo-v1-prd.md) - PRD for v1 hero loop
-- [docs/prd/PR-map-and-standards](docs/prd/PR-map-and-standards) - PR roadmap
-- [docs/technical/](docs/technical/) - Technical architecture
-
-## Environment Variables
-
-See [.env.example](.env.example) for all available configuration options.
-
-Key variables:
-- `DJANGO_SECRET_KEY` - Django secret key (required in production)
-- `DATABASE_URL` - PostgreSQL connection string
-- `DJANGO_DEBUG` - Debug mode (True/False)
-- `LLM_DISABLED` - Kill switch for LLM calls (True for tests/dev)
+- **Brand Onboarding**: Create brands with positioning, pillars, and voice
+- **Today Board**: AI-generated content opportunities
+- **SourceActivation**: Social media scraping from TikTok, Instagram
+- **Synthesis Pipeline**: LLM-powered opportunity generation
 
 ## API Endpoints
 
 ### Health Check
-
 ```
 GET /health/
 ```
 
-Returns `{"status": "ok", "service": "kairo-backend"}`.
+### Brands
+```
+POST /api/brands/                        # Create brand
+GET  /api/brands/{id}/                   # Get brand
+GET  /api/brands/{id}/today/             # Get today board
+POST /api/brands/{id}/today/regenerate/  # Regenerate opportunities
+```
 
----
+### Onboarding
+```
+POST /api/onboarding/session/            # Start onboarding
+POST /api/onboarding/step/               # Submit step
+POST /api/onboarding/finalize/           # Complete onboarding
+```
 
-**Status:** PR-0 (repo + env spine) complete. No business logic yet.
+## Testing
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=kairo
+
+# Run specific test file
+pytest tests/test_healthcheck.py
+```
+
+## Development Notes
+
+### Using Fixtures (No Apify Spend)
+
+To develop without Apify costs:
+
+```bash
+# In .env
+SOURCEACTIVATION_MODE_DEFAULT=fixture_only
+```
+
+This uses local fixture data instead of live scraping.
+
+### Database
+
+The app writes to the configured PostgreSQL database. For development, you can:
+1. Use your own local PostgreSQL
+2. Use the shared Supabase instance (contact maintainer for credentials)
+
+## License
+
+MIT
