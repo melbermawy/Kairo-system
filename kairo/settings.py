@@ -70,6 +70,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # Serve static files in production
     "corsheaders.middleware.CorsMiddleware",
     "kairo.middleware.timing.RequestTimingMiddleware",  # PR-7: API request timing
     "kairo.middleware.get_today_sentinel.GetTodaySentinelMiddleware",  # PR-0: GET context sentinel
@@ -230,6 +231,17 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Whitenoise: Serve compressed and cached static files in production
+# Works even without DEBUG=True, handles gzip compression automatically
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 
 # =============================================================================
