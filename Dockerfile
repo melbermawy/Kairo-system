@@ -1,5 +1,5 @@
 # Kairo Backend Dockerfile
-# PR-0: repo + env spine
+# Production-ready for Railway deployment
 
 FROM python:3.11-slim
 
@@ -16,15 +16,17 @@ RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY pyproject.toml .
-RUN pip install --no-cache-dir -e ".[dev]"
-
-# Copy project files
+# Copy project files first (needed for pip install)
 COPY . .
 
-# Expose port
+# Install Python dependencies (not editable mode for production)
+RUN pip install --no-cache-dir .
+
+# Expose port (Railway sets $PORT)
 EXPOSE 8000
 
-# Default command (can be overridden in docker-compose)
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Start script: migrate, collectstatic, then gunicorn
+# Railway provides $PORT environment variable
+CMD python manage.py migrate --noinput && \
+    python manage.py collectstatic --noinput && \
+    gunicorn kairo.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 2
