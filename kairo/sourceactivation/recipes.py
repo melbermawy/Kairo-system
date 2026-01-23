@@ -106,7 +106,7 @@ def build_ig_hashtag_input(seed_pack: "SeedPack") -> dict:
     return {
         "search": hashtag,  # The hashtag to search for
         "searchType": "hashtag",  # Required for hashtag search
-        "resultsLimit": 20,  # Max posts to return
+        "resultsLimit": 40,  # Phase 3: 2x from 20 to 40
         "searchLimit": 1,  # How many hashtags to search
     }
 
@@ -162,7 +162,7 @@ def build_ig_search_input(seed_pack: "SeedPack") -> dict:
     return {
         "search": hashtag_query,
         "searchType": "hashtag",  # Required - hashtag search gets better results
-        "resultsLimit": 20,
+        "resultsLimit": 40,  # Phase 3: 2x from 20 to 40
         "searchLimit": 1,
     }
 
@@ -189,7 +189,7 @@ def build_ig_reel_enrichment_input(urls: list[str]) -> dict:
     """
     return {
         "directUrls": urls,
-        "resultsLimit": 5,  # Our cap
+        "resultsLimit": 10,  # Phase 3: 2x from 5 to 10
     }
 
 
@@ -231,13 +231,162 @@ def filter_ig_reels_by_engagement(stage1_items: list[dict]) -> list[str]:
         reverse=True,
     )
 
-    # Take top N
-    return [c["url"] for c in candidates[:5]]
+    # Take top N - Phase 3: 2x from 5 to 10 for more transcript coverage
+    return [c["url"] for c in candidates[:10]]
 
 
 # =============================================================================
 # INPUT BUILDERS - TikTok
 # =============================================================================
+
+# =============================================================================
+# TikTok Trends Scraper Configuration (Phase 3)
+# =============================================================================
+
+# Default region for trend discovery (US is the largest TikTok market)
+# TODO: Make configurable per brand/user in future release
+TIKTOK_TRENDS_DEFAULT_REGION = "US"
+
+# Time range: "7" = last 7 days (freshest), "30" = 30 days, "120" = 120 days
+TIKTOK_TRENDS_DEFAULT_TIME_RANGE = "7"
+
+# Results per trends query (balance between coverage and cost)
+TIKTOK_TRENDS_RESULTS_GENERAL = 20  # General US trends
+TIKTOK_TRENDS_RESULTS_INDUSTRY = 15  # Industry-specific trends
+
+
+def build_tt_trends_general_input(seed_pack: "SeedPack") -> dict:
+    """
+    Build TikTok Trends Scraper input for GENERAL US trends.
+
+    Phase 3: Discover what's trending across ALL of TikTok (no industry filter).
+
+    This captures the broadest viral content that ANY brand could potentially
+    ride. Think: major cultural moments, viral sounds, trending formats.
+
+    Returns general US hashtags without industry filtering.
+    """
+    logger.info(
+        "TIKTOK_TRENDS_INPUT_BUILDER recipe=TT-TRENDS-GENERAL region=%s period=%s",
+        TIKTOK_TRENDS_DEFAULT_REGION,
+        TIKTOK_TRENDS_DEFAULT_TIME_RANGE,
+    )
+
+    return {
+        "country": TIKTOK_TRENDS_DEFAULT_REGION,
+        "period": TIKTOK_TRENDS_DEFAULT_TIME_RANGE,
+        "dataType": "hashtag",
+        "maxResults": TIKTOK_TRENDS_RESULTS_GENERAL,
+    }
+
+
+def build_tt_trends_industry_input(seed_pack: "SeedPack") -> dict:
+    """
+    Build TikTok Trends Scraper input for INDUSTRY-SPECIFIC trends.
+
+    Phase 3: Discover what's trending in the brand's SPECIFIC industry.
+
+    Uses the LLM-inferred industry from Query Planner (seed_pack.inferred_industry).
+    This captures trends that are specifically relevant to the brand's market.
+
+    If no industry is inferred, falls back to general trends (no filter).
+    """
+    industry = seed_pack.inferred_industry
+
+    if industry:
+        logger.info(
+            "TIKTOK_TRENDS_INPUT_BUILDER recipe=TT-TRENDS-INDUSTRY region=%s period=%s industry=%s",
+            TIKTOK_TRENDS_DEFAULT_REGION,
+            TIKTOK_TRENDS_DEFAULT_TIME_RANGE,
+            industry,
+        )
+        return {
+            "country": TIKTOK_TRENDS_DEFAULT_REGION,
+            "period": TIKTOK_TRENDS_DEFAULT_TIME_RANGE,
+            "dataType": "hashtag",
+            "industry": industry,
+            "maxResults": TIKTOK_TRENDS_RESULTS_INDUSTRY,
+        }
+    else:
+        # No industry inferred - log warning and return general trends
+        logger.warning(
+            "TIKTOK_TRENDS_INPUT_BUILDER recipe=TT-TRENDS-INDUSTRY "
+            "NO_INDUSTRY_INFERRED - falling back to general trends",
+        )
+        return {
+            "country": TIKTOK_TRENDS_DEFAULT_REGION,
+            "period": TIKTOK_TRENDS_DEFAULT_TIME_RANGE,
+            "dataType": "hashtag",
+            "maxResults": TIKTOK_TRENDS_RESULTS_INDUSTRY,
+        }
+
+
+# =============================================================================
+# TIKTOK TRENDS → TT-1 CHAINING (Phase 3)
+# =============================================================================
+
+# Maximum trending hashtags to pass from TT-TRENDS to TT-1
+MAX_TRENDING_HASHTAGS_FOR_TT1 = 5
+
+
+def extract_trending_hashtags(trends_raw_items: list[dict]) -> list[str]:
+    """
+    Extract top trending hashtags from TT-TRENDS scraper output.
+
+    Phase 3: This function extracts hashtags from TT-TRENDS results to chain
+    into TT-1 for content scraping with transcripts.
+
+    Args:
+        trends_raw_items: Raw output from TikTok Trends Scraper actor
+
+    Returns:
+        List of hashtag strings (without # prefix), sorted by trending score
+    """
+    hashtag_data = []
+
+    for item in trends_raw_items:
+        hashtag = item.get("hashtag")
+        if not hashtag:
+            continue
+
+        # Extract metrics for sorting
+        trending_score = item.get("trendingScore", 0)
+        total_views = item.get("totalViews", 0)
+        growth_rate_str = item.get("growthRate", "0%")
+
+        # Parse growth rate (e.g., "+42%" -> 42)
+        try:
+            growth_rate = int(growth_rate_str.replace("%", "").replace("+", "").replace("-", ""))
+            if "-" in growth_rate_str:
+                growth_rate = -growth_rate
+        except (ValueError, AttributeError):
+            growth_rate = 0
+
+        hashtag_data.append({
+            "hashtag": hashtag.lstrip("#"),  # Remove # if present
+            "trending_score": trending_score,
+            "total_views": total_views,
+            "growth_rate": growth_rate,
+        })
+
+    # Sort by trending score (primary), then growth rate (secondary)
+    hashtag_data.sort(
+        key=lambda x: (x["trending_score"], x["growth_rate"]),
+        reverse=True,
+    )
+
+    # Return top hashtags
+    top_hashtags = [h["hashtag"] for h in hashtag_data[:MAX_TRENDING_HASHTAGS_FOR_TT1]]
+
+    logger.info(
+        "TRENDING_HASHTAG_EXTRACTION total_items=%d extracted=%d hashtags=%s",
+        len(trends_raw_items),
+        len(top_hashtags),
+        top_hashtags,
+    )
+
+    return top_hashtags
+
 
 def build_tt_hashtag_input(seed_pack: "SeedPack") -> dict:
     """
@@ -245,9 +394,13 @@ def build_tt_hashtag_input(seed_pack: "SeedPack") -> dict:
 
     Per PRD B.2.2: Single-stage, semantically rich.
 
-    QUERY PLANNER INTEGRATION:
-    - Uses seed_pack.tiktok_queries (LLM-generated semantic search probes)
-    - Falls back to _build_tiktok_search_queries if query plan is empty
+    PHASE 3 CHAINED EXECUTION:
+    - PRIORITY 1: Use trending_hashtags from TT-TRENDS results (best quality)
+    - PRIORITY 2: Use tiktok_queries from Query Planner (LLM-generated probes)
+    - PRIORITY 3: Fall back to deterministic builder
+
+    When trending_hashtags are available (from TT-TRENDS → TT-1 chain), we get
+    content for what's ACTUALLY trending on TikTok, with full transcripts.
 
     TikTok Scraper search options (per apify_actor_samples.md):
     - searchQueries: Keywords to search for videos
@@ -258,18 +411,26 @@ def build_tt_hashtag_input(seed_pack: "SeedPack") -> dict:
     NOTE: Cannot combine searchSorting with leastDiggs (popularity filter).
     We prioritize freshness over engagement because staleness gate is hard requirement.
     """
-    # Use Query Planner output if available (preferred - semantic search probes)
-    if seed_pack.tiktok_queries:
+    # PRIORITY 1: Use trending hashtags from TT-TRENDS (Phase 3 chained execution)
+    if seed_pack.trending_hashtags:
+        # Format hashtags for search (add # prefix for hashtag search)
+        search_queries = [f"#{h}" for h in seed_pack.trending_hashtags[:5]]
+        logger.info(
+            "TIKTOK_INPUT_BUILDER recipe=TT-1 source=TRENDING_HASHTAGS queries=%s",
+            search_queries,
+        )
+    # PRIORITY 2: Use Query Planner output (LLM-generated semantic search probes)
+    elif seed_pack.tiktok_queries:
         search_queries = seed_pack.tiktok_queries[:3]  # Max 3 queries
         logger.info(
             "TIKTOK_INPUT_BUILDER recipe=TT-1 source=QUERY_PLANNER queries=%s",
             search_queries,
         )
+    # PRIORITY 3: Fallback to deterministic builder (legacy)
     else:
-        # Fallback to deterministic builder (legacy - will produce worse results)
         search_queries = _build_tiktok_search_queries(seed_pack)
         logger.warning(
-            "TIKTOK_INPUT_BUILDER recipe=TT-1 source=FALLBACK queries=%s (Query Planner not available)",
+            "TIKTOK_INPUT_BUILDER recipe=TT-1 source=FALLBACK queries=%s (no trends or query plan)",
             search_queries,
         )
 
@@ -289,7 +450,7 @@ def build_tt_hashtag_input(seed_pack: "SeedPack") -> dict:
     return {
         # Use searchQueries for keyword search
         "searchQueries": search_queries,
-        "resultsPerPage": 15,  # Our cap
+        "resultsPerPage": 30,  # Phase 3: 2x from 15 to 30
         # Search in Video section (not profiles) - MUST be "/video" per Apify schema
         "searchSection": "/video",
         # Sort: "0"=Most relevant, "1"=Most liked, "3"=Newest
@@ -326,7 +487,7 @@ def build_tt_profile_input(seed_pack: "SeedPack") -> dict:
 
     return {
         "profiles": [username],
-        "resultsPerPage": 10,
+        "resultsPerPage": 20,  # Phase 3: 2x from 10 to 20
         # Sort by latest to prioritize recent content
         "profileSorting": "latest",
         # Freshness constraint (works for profile scraping)
@@ -353,7 +514,7 @@ def build_li_company_input(seed_pack: "SeedPack") -> dict:
 
     return {
         "companyNames": [company_name],
-        "limit": 20,  # Our cap
+        "limit": 40,  # Phase 3: 2x from 20 to 40
     }
 
 
@@ -371,7 +532,7 @@ def build_yt_search_input(seed_pack: "SeedPack") -> dict:
 
     return {
         "searchQueries": [query],
-        "maxResults": 10,  # Our cap
+        "maxResults": 20,  # Phase 3: 2x from 10 to 20
         "downloadSubtitles": True,  # Enable transcript retrieval
     }
 
@@ -451,16 +612,17 @@ def _build_tiktok_search_queries(seed_pack: "SeedPack") -> list[str]:
 
 RECIPE_REGISTRY: dict[str, RecipeSpec] = {
     # Instagram recipes (2-stage MANDATORY)
+    # Phase 3: Limits DOUBLED for more evidence collection
     "IG-1": RecipeSpec(
         recipe_id="IG-1",
         platform="instagram",
         description="Hashtag search → Reel enrichment",
         stage1_actor="apify/instagram-scraper",
         stage1_input_builder=build_ig_hashtag_input,
-        stage1_result_limit=20,
+        stage1_result_limit=40,  # Phase 3: 2x from 20 to 40
         stage2_actor="apify/instagram-reel-scraper",
         stage2_input_builder=build_ig_reel_enrichment_input,
-        stage2_result_limit=5,
+        stage2_result_limit=10,  # Phase 3: 2x from 5 to 10
         stage1_to_stage2_filter=filter_ig_reels_by_engagement,
     ),
 
@@ -470,10 +632,10 @@ RECIPE_REGISTRY: dict[str, RecipeSpec] = {
         description="Profile posts → Reel enrichment",
         stage1_actor="apify/instagram-scraper",
         stage1_input_builder=build_ig_profile_input,
-        stage1_result_limit=15,
+        stage1_result_limit=30,  # Phase 3: 2x from 15 to 30
         stage2_actor="apify/instagram-reel-scraper",
         stage2_input_builder=build_ig_reel_enrichment_input,
-        stage2_result_limit=5,
+        stage2_result_limit=10,  # Phase 3: 2x from 5 to 10
         stage1_to_stage2_filter=filter_ig_reels_by_engagement,
     ),
 
@@ -483,10 +645,10 @@ RECIPE_REGISTRY: dict[str, RecipeSpec] = {
         description="Search query → Reel enrichment",
         stage1_actor="apify/instagram-scraper",
         stage1_input_builder=build_ig_search_input,
-        stage1_result_limit=20,
+        stage1_result_limit=40,  # Phase 3: 2x from 20 to 40
         stage2_actor="apify/instagram-reel-scraper",
         stage2_input_builder=build_ig_reel_enrichment_input,
-        stage2_result_limit=5,
+        stage2_result_limit=10,  # Phase 3: 2x from 5 to 10
         stage1_to_stage2_filter=filter_ig_reels_by_engagement,
     ),
 
@@ -496,21 +658,22 @@ RECIPE_REGISTRY: dict[str, RecipeSpec] = {
         description="Competitor watch → Reel enrichment",
         stage1_actor="apify/instagram-scraper",
         stage1_input_builder=build_ig_competitor_input,
-        stage1_result_limit=10,
+        stage1_result_limit=20,  # Phase 3: 2x from 10 to 20
         stage2_actor="apify/instagram-reel-scraper",
         stage2_input_builder=build_ig_reel_enrichment_input,
-        stage2_result_limit=3,
+        stage2_result_limit=6,  # Phase 3: 2x from 3 to 6
         stage1_to_stage2_filter=filter_ig_reels_by_engagement,
     ),
 
     # TikTok recipes (single-stage, semantically rich)
+    # Phase 3: Limits DOUBLED for more evidence collection
     "TT-1": RecipeSpec(
         recipe_id="TT-1",
         platform="tiktok",
         description="Hashtag search",
         stage1_actor="clockworks/tiktok-scraper",
         stage1_input_builder=build_tt_hashtag_input,
-        stage1_result_limit=15,
+        stage1_result_limit=30,  # Phase 3: 2x from 15 to 30
         stage2_actor=None,
         stage2_input_builder=None,
         stage2_result_limit=None,
@@ -523,7 +686,41 @@ RECIPE_REGISTRY: dict[str, RecipeSpec] = {
         description="Profile videos",
         stage1_actor="clockworks/tiktok-scraper",
         stage1_input_builder=build_tt_profile_input,
-        stage1_result_limit=10,
+        stage1_result_limit=20,  # Phase 3: 2x from 10 to 20
+        stage2_actor=None,
+        stage2_input_builder=None,
+        stage2_result_limit=None,
+        stage1_to_stage2_filter=None,
+    ),
+
+    # Phase 3: TikTok Trends discovery recipes (two queries: general + industry)
+    # Together these find WHAT is trending - complements TT-1 which gets content with transcripts
+    #
+    # Strategy:
+    # - TT-TRENDS-GENERAL: Broad US trends (viral content any brand could ride)
+    # - TT-TRENDS-INDUSTRY: Industry-specific trends (relevant to brand's market)
+    # Both run in parallel for speed, total ~35 trending hashtags
+
+    "TT-TRENDS-GENERAL": RecipeSpec(
+        recipe_id="TT-TRENDS-GENERAL",
+        platform="tiktok",
+        description="TikTok General US Trends",
+        stage1_actor="clockworks/tiktok-trends-scraper",
+        stage1_input_builder=build_tt_trends_general_input,
+        stage1_result_limit=20,  # 20 general trending hashtags
+        stage2_actor=None,
+        stage2_input_builder=None,
+        stage2_result_limit=None,
+        stage1_to_stage2_filter=None,
+    ),
+
+    "TT-TRENDS-INDUSTRY": RecipeSpec(
+        recipe_id="TT-TRENDS-INDUSTRY",
+        platform="tiktok",
+        description="TikTok Industry-Specific Trends",
+        stage1_actor="clockworks/tiktok-trends-scraper",
+        stage1_input_builder=build_tt_trends_industry_input,
+        stage1_result_limit=15,  # 15 industry-specific trending hashtags
         stage2_actor=None,
         stage2_input_builder=None,
         stage2_result_limit=None,
@@ -531,13 +728,14 @@ RECIPE_REGISTRY: dict[str, RecipeSpec] = {
     ),
 
     # LinkedIn recipes (single-stage, text-heavy)
+    # Phase 3: Limits DOUBLED for more evidence collection
     "LI-1": RecipeSpec(
         recipe_id="LI-1",
         platform="linkedin",
         description="Company posts",
         stage1_actor="apimaestro/linkedin-company-posts",
         stage1_input_builder=build_li_company_input,
-        stage1_result_limit=20,
+        stage1_result_limit=40,  # Phase 3: 2x from 20 to 40
         stage2_actor=None,
         stage2_input_builder=None,
         stage2_result_limit=None,
@@ -545,13 +743,14 @@ RECIPE_REGISTRY: dict[str, RecipeSpec] = {
     ),
 
     # YouTube recipes (single-stage, semantically rich)
+    # Phase 3: Limits DOUBLED for more evidence collection
     "YT-1": RecipeSpec(
         recipe_id="YT-1",
         platform="youtube",
         description="Search videos",
         stage1_actor="streamers/youtube-scraper",
         stage1_input_builder=build_yt_search_input,
-        stage1_result_limit=10,
+        stage1_result_limit=20,  # Phase 3: 2x from 10 to 20
         stage2_actor=None,
         stage2_input_builder=None,
         stage2_result_limit=None,
@@ -561,9 +760,24 @@ RECIPE_REGISTRY: dict[str, RecipeSpec] = {
 
 
 # Default execution plan for POST /regenerate
-# Per PRD G.1.2: Recipe priority order: IG-1 → IG-3 → TT-1
-# NOTE: TT-1 temporarily disabled (TikTok scraper requires more Apify credits)
-DEFAULT_EXECUTION_PLAN = ["IG-1", "IG-3"]  # Original: ["IG-1", "IG-3", "TT-1"]
+# Phase 3: ALL platforms enabled for maximum evidence collection
+# Users with BYOK pay their own API costs, so we enable everything.
+#
+# Order: Instagram → TikTok (trends general + industry + content) → YouTube → LinkedIn
+# TikTok trends run two queries for broader coverage:
+# - GENERAL: What's trending across all of TikTok (viral moments)
+# - INDUSTRY: What's trending in the brand's specific market
+#
+# All recipes run in PARALLEL for speed (~3x faster than sequential)
+DEFAULT_EXECUTION_PLAN = [
+    "IG-1",              # Instagram hashtag search → Reel enrichment
+    "IG-3",              # Instagram keyword search → Reel enrichment
+    "TT-TRENDS-GENERAL", # TikTok Trends - general US viral content
+    "TT-TRENDS-INDUSTRY",# TikTok Trends - industry-specific (uses LLM-inferred industry)
+    "TT-1",              # TikTok keyword search (gets content with transcripts)
+    "YT-1",              # YouTube search (with subtitles)
+    "LI-1",              # LinkedIn company posts
+]
 
 
 def get_recipe(recipe_id: str) -> RecipeSpec | None:

@@ -100,8 +100,17 @@ def _list_brands(request) -> JsonResponse:
     [
         {"id": "uuid", "name": "string", "website_url": "string|null", "created_at": "iso"}
     ]
+
+    Filters by owner if authenticated, otherwise returns all (for backward compat).
     """
-    brands = Brand.objects.filter(deleted_at__isnull=True).order_by("-created_at")
+    queryset = Brand.objects.filter(deleted_at__isnull=True)
+
+    # Filter by owner if user is authenticated
+    kairo_user = getattr(request, "kairo_user", None)
+    if kairo_user is not None:
+        queryset = queryset.filter(owner=kairo_user)
+
+    brands = queryset.order_by("-created_at")
     return JsonResponse([_brand_to_dict(b) for b in brands], safe=False)
 
 
@@ -154,11 +163,15 @@ def _create_brand(request) -> JsonResponse:
     if website_url:
         metadata["website_url"] = website_url.strip()
 
+    # Set owner if user is authenticated
+    kairo_user = getattr(request, "kairo_user", None)
+
     brand = Brand.objects.create(
         tenant=tenant,
         name=name,
         slug=slug,
         metadata=metadata,
+        owner=kairo_user,
     )
 
     return JsonResponse(_brand_to_dict(brand), status=201)

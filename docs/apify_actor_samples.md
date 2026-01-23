@@ -499,7 +499,105 @@ This document contains one input/output example for each Apify actor used in the
 
 ---
 
-## 6. streamers/youtube-scraper
+## 6. clockworks/tiktok-trends-scraper
+
+**Actor ID:** `clockworks/tiktok-trends-scraper`
+
+**Description:** Scrapes TikTok Trend Discovery data including trending hashtags, songs, creators, and videos filtered by region, time period, and industry.
+
+**Source:** [Apify TikTok Trends Scraper](https://apify.com/clockworks/tiktok-trends-scraper)
+
+### Available Input Fields
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `country` | string | Optional | `"US"` | ISO 3166-1 alpha-2 country code (e.g., "US", "GB", "DE") |
+| `period` | string | Optional | `"7"` | Time range: `"7"` (7 days), `"30"` (30 days), `"120"` (120 days) |
+| `dataType` | string | Optional | `"hashtag"` | What to scrape: `"hashtag"`, `"song"`, `"creator"`, `"video"` |
+| `industry` | string | Optional | — | Industry filter (e.g., "Technology", "Beauty & Personal Care") |
+| `maxResults` | integer | Optional | 30 | Maximum results to return |
+
+### Example Input
+```json
+{
+  "country": "US",
+  "period": "7",
+  "dataType": "hashtag",
+  "industry": "Technology",
+  "maxResults": 30
+}
+```
+
+### Output
+```json
+{
+  "hashtag": "aimarketing",
+  "hashtagUrl": "https://www.tiktok.com/tag/aimarketing",
+  "totalViews": 1250000000,
+  "totalVideos": 85000,
+  "trendingScore": 95,
+  "growthRate": "+42%",
+  "relatedHashtags": ["marketing", "ai", "digitalmarketing", "socialmedia"],
+  "topCreators": [
+    {
+      "username": "marketingtips",
+      "followers": 2500000
+    }
+  ],
+  "industry": "Technology",
+  "region": "US",
+  "scrapedAt": "2026-01-22T10:30:00.000Z"
+}
+```
+
+**Kairo Usage:** This scraper discovers WHAT is trending on TikTok. Kairo uses TWO recipes with **CHAINED EXECUTION**:
+
+1. **TT-TRENDS-GENERAL** - Broad US trends without industry filter (20 results)
+   - Captures viral content any brand could potentially ride
+   - Think: major cultural moments, viral sounds, trending formats
+
+2. **TT-TRENDS-INDUSTRY** - Industry-specific trends (15 results)
+   - Uses LLM-inferred industry from brand context
+   - Captures trends specifically relevant to the brand's market
+
+**Phase 3 Chained Pipeline (TT-TRENDS → TT-1):**
+```
+┌──────────────────────────────────────────────────────────────┐
+│  PARALLEL EXECUTION (Phase 1)                                │
+│  ┌─────────┐ ┌─────────┐ ┌───────┐ ┌───────┐ ┌────────────┐ │
+│  │  IG-1   │ │  IG-3   │ │ YT-1  │ │ LI-1  │ │ TT-TRENDS  │ │
+│  └─────────┘ └─────────┘ └───────┘ └───────┘ └──────┬─────┘ │
+│                                                      │       │
+│                                                      ▼       │
+│                                         Extract top hashtags │
+│                                                      │       │
+│  SEQUENTIAL (Phase 2)                                ▼       │
+│                                              ┌─────────────┐ │
+│                                              │    TT-1     │ │
+│                                              │ (transcripts)│ │
+│                                              └─────────────┘ │
+└──────────────────────────────────────────────────────────────┘
+```
+
+The chained pipeline:
+1. TT-TRENDS-GENERAL and TT-TRENDS-INDUSTRY run in parallel (discover what's trending)
+2. Top trending hashtags are extracted and ranked by `trendingScore` and `growthRate`
+3. TT-1 runs with these hashtags to get actual video content WITH transcripts
+4. Result: Rich, transcript-laden content for what's actually trending on TikTok
+
+This ensures opportunity synthesis has both:
+- Knowledge of WHAT is trending (from TT-TRENDS)
+- Rich transcript content for HOW to create similar content (from TT-1)
+
+**Valid Industry Categories:**
+- Technology, Apparel & Accessories, Beauty & Personal Care
+- Food & Beverage, Sports & Outdoors, Financial Services
+- Education, Games, Travel, E-commerce
+- Vehicles & Transportation, Life Services, News & Entertainment
+
+---
+
+## 7. streamers/youtube-scraper
 
 **Actor ID:** `streamers/youtube-scraper`
 
@@ -602,4 +700,5 @@ This document contains one input/output example for each Apify actor used in the
 | `apify/website-content-crawler` | Web | Page content as markdown, metadata, OpenGraph, JSON-LD |
 | `apimaestro/linkedin-company-posts` | LinkedIn | Company posts, engagement stats, media |
 | `clockworks/tiktok-scraper` | TikTok | Videos, author info, hashtags, subtitles |
+| `clockworks/tiktok-trends-scraper` | TikTok | Trending hashtags, songs, creators by region/industry |
 | `streamers/youtube-scraper` | YouTube | Videos, channel info, engagement, description |

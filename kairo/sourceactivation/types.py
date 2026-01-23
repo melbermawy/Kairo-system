@@ -56,6 +56,15 @@ class SeedPack:
     instagram_hashtags: list[str] = field(default_factory=list)
     query_plan_error: str | None = None
 
+    # Phase 3: LLM-inferred industry for TikTok Trends Scraper
+    # Maps to TikTok Creative Center industry filters (e.g., "Technology", "Beauty & Personal Care")
+    inferred_industry: str | None = None
+
+    # Phase 3: Trending hashtags discovered by TT-TRENDS recipes
+    # These are passed to TT-1 for content scraping with transcripts
+    # Populated dynamically during execution (TT-TRENDS → TT-1 chain)
+    trending_hashtags: list[str] = field(default_factory=list)
+
 
 @dataclass
 class EvidenceItemData:

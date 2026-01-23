@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # BUDGET POLICY CONSTANTS (Per PRD G.1.1)
 # =============================================================================
+# Phase 3: Budget restrictions are now DISABLED by default for BYOK users.
+# Users pay for their own API usage, so we remove artificial caps.
+# These constants are kept for backwards compatibility but set to None/False.
 
 def _get_decimal_env(name: str, default: str) -> Decimal:
     """Get decimal value from environment or settings."""
@@ -51,20 +54,23 @@ def _get_bool_env(name: str, default: bool) -> bool:
     return getattr(settings, name, default)
 
 
-# Total project budget (fixed, for reference)
+# Total project budget (fixed, for reference) - not enforced
 APIFY_BUDGET_TOTAL_USD = _get_decimal_env("APIFY_BUDGET_TOTAL_USD", "5.00")
 
-# Remaining budget as of PRD date (operator-managed constant)
+# Remaining budget as of PRD date (operator-managed constant) - not enforced
 APIFY_BUDGET_REMAINING_USD = _get_decimal_env("APIFY_BUDGET_REMAINING_USD", "2.77")
 
-# Maximum spend per calendar day
-APIFY_DAILY_SPEND_CAP_USD = _get_decimal_env("APIFY_DAILY_SPEND_CAP_USD", "0.50")
+# Maximum spend per calendar day - Phase 3: REMOVED (set very high)
+# Users with BYOK pay their own way, no need to cap
+APIFY_DAILY_SPEND_CAP_USD = _get_decimal_env("APIFY_DAILY_SPEND_CAP_USD", "999999.00")
 
-# Maximum spend per POST /regenerate/ execution
-APIFY_PER_REGENERATE_CAP_USD = _get_decimal_env("APIFY_PER_REGENERATE_CAP_USD", "0.25")
+# Maximum spend per POST /regenerate/ execution - Phase 3: REMOVED (set very high)
+# Users with BYOK pay their own way, no need to cap
+APIFY_PER_REGENERATE_CAP_USD = _get_decimal_env("APIFY_PER_REGENERATE_CAP_USD", "999999.00")
 
-# If budget exhausted, block all Apify runs
-APIFY_HARD_STOP_ON_EXHAUSTION = _get_bool_env("APIFY_HARD_STOP_ON_EXHAUSTION", True)
+# If budget exhausted, block all Apify runs - Phase 3: DISABLED
+# With BYOK, users manage their own Apify account limits
+APIFY_HARD_STOP_ON_EXHAUSTION = _get_bool_env("APIFY_HARD_STOP_ON_EXHAUSTION", False)
 
 
 # =============================================================================
@@ -82,41 +88,51 @@ class ActorCaps:
 
 
 # Actor caps per PRD G.1 table
+# Phase 3: Limits DOUBLED for more evidence collection
+# More evidence = better opportunities. Users with BYOK pay their own usage.
 ACTOR_CAPS = {
     "apify/instagram-scraper": ActorCaps(
         actor_id="apify/instagram-scraper",
         cap_field="resultsLimit",
-        our_limit=20,
+        our_limit=40,  # Phase 3: 2x from 20 to 40
         actor_max=200,
-        estimated_cost_per_result=Decimal("0.002"),  # ~$0.04 for 20 results
+        estimated_cost_per_result=Decimal("0.002"),
     ),
     "apify/instagram-reel-scraper": ActorCaps(
         actor_id="apify/instagram-reel-scraper",
         cap_field="resultsLimit",
-        our_limit=5,
+        our_limit=10,  # Phase 3: 2x from 5 to 10
         actor_max=200,
-        estimated_cost_per_result=Decimal("0.008"),  # ~$0.04 for 5 results
+        estimated_cost_per_result=Decimal("0.008"),
     ),
     "clockworks/tiktok-scraper": ActorCaps(
         actor_id="clockworks/tiktok-scraper",
         cap_field="resultsPerPage",
-        our_limit=15,
+        our_limit=30,  # Phase 3: 2x from 15 to 30
         actor_max=1_000_000,
-        estimated_cost_per_result=Decimal("0.003"),  # ~$0.05 for 15 results
+        estimated_cost_per_result=Decimal("0.003"),
+    ),
+    # Phase 3: TikTok Trends Scraper for trend discovery
+    "clockworks/tiktok-trends-scraper": ActorCaps(
+        actor_id="clockworks/tiktok-trends-scraper",
+        cap_field="maxResults",
+        our_limit=30,  # 30 trending hashtags per run
+        actor_max=100,
+        estimated_cost_per_result=Decimal("0.002"),
     ),
     "apimaestro/linkedin-company-posts": ActorCaps(
         actor_id="apimaestro/linkedin-company-posts",
         cap_field="limit",
-        our_limit=20,
+        our_limit=40,  # Phase 3: 2x from 20 to 40
         actor_max=100,
-        estimated_cost_per_result=Decimal("0.002"),  # ~$0.04 for 20 results
+        estimated_cost_per_result=Decimal("0.002"),
     ),
     "streamers/youtube-scraper": ActorCaps(
         actor_id="streamers/youtube-scraper",
         cap_field="maxResults",
-        our_limit=10,
+        our_limit=20,  # Phase 3: 2x from 10 to 20
         actor_max=999_999,
-        estimated_cost_per_result=Decimal("0.003"),  # ~$0.03 for 10 results
+        estimated_cost_per_result=Decimal("0.003"),
     ),
 }
 
@@ -171,6 +187,19 @@ RECIPE_COST_ESTIMATES = {
     "TT-2": RecipeCostEstimate(
         recipe_id="TT-2",
         stage1_cost=Decimal("0.03"),
+        stage2_cost=Decimal("0"),
+        total_cost=Decimal("0.03"),
+    ),
+    # Phase 3: TikTok Trends Discovery (two queries: general + industry)
+    "TT-TRENDS-GENERAL": RecipeCostEstimate(
+        recipe_id="TT-TRENDS-GENERAL",
+        stage1_cost=Decimal("0.04"),  # ~20 results at $0.002 each
+        stage2_cost=Decimal("0"),
+        total_cost=Decimal("0.04"),
+    ),
+    "TT-TRENDS-INDUSTRY": RecipeCostEstimate(
+        recipe_id="TT-TRENDS-INDUSTRY",
+        stage1_cost=Decimal("0.03"),  # ~15 results at $0.002 each
         stage2_cost=Decimal("0"),
         total_cost=Decimal("0.03"),
     ),
@@ -364,11 +393,14 @@ def apply_caps_to_input(actor_id: str, input_data: dict) -> dict:
 # =============================================================================
 # EVIDENCE SUFFICIENCY GATES (Per PRD G.1.2)
 # =============================================================================
+# Phase 3: These gates are now set high to collect MORE evidence (not less).
+# With BYOK, users pay for their own usage and want maximum quality.
 
-# Minimum evidence items for synthesis
-MIN_EVIDENCE_ITEMS = 8
+# Minimum evidence items for synthesis - Phase 3: INCREASED to collect more
+# Before we might early-exit at 8 items; now we want ~100 items
+MIN_EVIDENCE_ITEMS = 100
 
-# Minimum transcript coverage for quality
+# Minimum transcript coverage for quality - kept for quality assurance
 MIN_TRANSCRIPT_COVERAGE = 0.30  # 30%
 
 
@@ -376,17 +408,23 @@ def should_continue_recipes(evidence_items: list) -> bool:
     """
     Check if more recipes should execute.
 
-    Per PRD G.1.2 Transcript Quota Gate:
-    Returns False if evidence gates are already met (early-exit opportunity).
+    Phase 3 Update: With BYOK, we ALWAYS want to continue and collect
+    maximum evidence. Users pay for their own usage and want quality.
+
+    The early-exit logic is effectively disabled by setting MIN_EVIDENCE_ITEMS
+    very high, so all recipes in the execution plan will run.
 
     Args:
         evidence_items: List of evidence items collected so far
 
     Returns:
-        True if more recipes should execute, False if gates met
+        True (always continue) - collect all evidence from all recipes
     """
+    # Phase 3: Always continue to collect maximum evidence
+    # Early-exit was a budget-saving measure; BYOK users want maximum quality
     item_count = len(evidence_items)
 
+    # Only early-exit if we have a truly massive amount (defensive limit)
     if item_count >= MIN_EVIDENCE_ITEMS:
         transcript_count = sum(
             1 for e in evidence_items

@@ -73,6 +73,10 @@ class QueryPlan:
     raw_llm_output: dict = field(default_factory=dict)
     error: str | None = None
 
+    # Phase 3: LLM-inferred industry for TikTok Trends Discovery
+    # Maps to TikTok Creative Center industry filters
+    inferred_industry: str | None = None
+
     def get_tiktok_queries(self) -> list[str]:
         """Get TikTok search queries."""
         if "tiktok" in self.probes:
@@ -154,6 +158,7 @@ TikTok search is TOPIC-based, not phrase-based:
 ## Output Format
 Return ONLY valid JSON:
 {{
+  "inferred_industry": "Technology",
   "tiktok": {{
     "searchQueries": ["broad trend query", "topic query 1", "topic query 2", "another trend query", "topic query 3"],
     "hashtags": ["popular hashtag", "niche hashtag", "trending hashtag"],
@@ -165,6 +170,24 @@ Return ONLY valid JSON:
     "rationale": "Brief explanation"
   }}
 }}
+
+## Industry Classification
+The "inferred_industry" field should map this brand to ONE of TikTok's industry categories:
+- Technology (software, SaaS, apps, AI, tech hardware)
+- Apparel & Accessories (fashion, clothing, jewelry)
+- Beauty & Personal Care (cosmetics, skincare, haircare)
+- Food & Beverage (restaurants, CPG food, drinks)
+- Sports & Outdoors (fitness, sports equipment, outdoor gear)
+- Financial Services (fintech, banking, insurance, crypto)
+- Education (edtech, courses, tutoring)
+- Games (gaming, esports, mobile games)
+- Travel (tourism, hotels, airlines)
+- E-commerce (online retail, marketplaces)
+- Vehicles & Transportation (automotive, mobility)
+- Life Services (real estate, legal, home services)
+- News & Entertainment (media, streaming, publishing)
+
+If the brand doesn't clearly fit, use the closest match or null.
 
 Generate 5 search queries and 3-5 hashtags per platform. Mix trend discovery with topic queries.
 """
@@ -340,10 +363,26 @@ def _parse_llm_response(brand_id: str, response: str) -> QueryPlan:
                 rationale=platform_data.get("rationale", ""),
             )
 
+    # Phase 3: Extract inferred industry for TikTok Trends Discovery
+    inferred_industry = _validate_industry(data.get("inferred_industry"))
+
+    if inferred_industry:
+        logger.info(
+            "QUERY_PLANNER_INDUSTRY_INFERRED brand_id=%s industry=%s",
+            brand_id,
+            inferred_industry,
+        )
+    else:
+        logger.warning(
+            "QUERY_PLANNER_INDUSTRY_NOT_INFERRED brand_id=%s (will use general trends only)",
+            brand_id,
+        )
+
     return QueryPlan(
         brand_id=brand_id,
         probes=probes,
         raw_llm_output=data,
+        inferred_industry=inferred_industry,
     )
 
 
@@ -366,6 +405,95 @@ def _validate_hashtags(hashtags: list) -> list[str]:
             if len(h) > 1:
                 validated.append(h[:50])  # Cap length
     return validated[:5]  # Max 5 hashtags
+
+
+# Phase 3: Valid TikTok Creative Center industry categories
+VALID_TIKTOK_INDUSTRIES = {
+    "Technology",
+    "Apparel & Accessories",
+    "Beauty & Personal Care",
+    "Food & Beverage",
+    "Sports & Outdoors",
+    "Financial Services",
+    "Education",
+    "Games",
+    "Travel",
+    "E-commerce",
+    "Vehicles & Transportation",
+    "Life Services",
+    "News & Entertainment",
+}
+
+
+def _validate_industry(industry: str | None) -> str | None:
+    """Validate and normalize industry to TikTok Creative Center categories."""
+    if not industry or not isinstance(industry, str):
+        return None
+
+    industry = industry.strip()
+
+    # Direct match
+    if industry in VALID_TIKTOK_INDUSTRIES:
+        return industry
+
+    # Fuzzy match (case-insensitive)
+    industry_lower = industry.lower()
+    for valid in VALID_TIKTOK_INDUSTRIES:
+        if valid.lower() == industry_lower:
+            return valid
+
+    # Partial match (e.g., "Tech" -> "Technology")
+    partial_matches = {
+        "tech": "Technology",
+        "software": "Technology",
+        "saas": "Technology",
+        "ai": "Technology",
+        "fashion": "Apparel & Accessories",
+        "apparel": "Apparel & Accessories",
+        "clothing": "Apparel & Accessories",
+        "beauty": "Beauty & Personal Care",
+        "cosmetics": "Beauty & Personal Care",
+        "skincare": "Beauty & Personal Care",
+        "food": "Food & Beverage",
+        "beverage": "Food & Beverage",
+        "restaurant": "Food & Beverage",
+        "fitness": "Sports & Outdoors",
+        "sports": "Sports & Outdoors",
+        "outdoor": "Sports & Outdoors",
+        "finance": "Financial Services",
+        "fintech": "Financial Services",
+        "banking": "Financial Services",
+        "crypto": "Financial Services",
+        "education": "Education",
+        "edtech": "Education",
+        "gaming": "Games",
+        "game": "Games",
+        "esports": "Games",
+        "travel": "Travel",
+        "tourism": "Travel",
+        "hotel": "Travel",
+        "ecommerce": "E-commerce",
+        "retail": "E-commerce",
+        "shopping": "E-commerce",
+        "auto": "Vehicles & Transportation",
+        "automotive": "Vehicles & Transportation",
+        "car": "Vehicles & Transportation",
+        "real estate": "Life Services",
+        "legal": "Life Services",
+        "media": "News & Entertainment",
+        "entertainment": "News & Entertainment",
+        "streaming": "News & Entertainment",
+    }
+
+    for key, value in partial_matches.items():
+        if key in industry_lower:
+            return value
+
+    logger.warning(
+        "QUERY_PLANNER_UNKNOWN_INDUSTRY industry=%s (not in valid list)",
+        industry,
+    )
+    return None
 
 
 def _mix_trend_bank_queries(plan: QueryPlan) -> QueryPlan:

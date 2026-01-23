@@ -50,6 +50,7 @@ from kairo.hero.graphs.synthesis_pipeline import (
     PipelineTimings,
     MIN_READY_OPPS,
 )
+from kairo.hero.llm_client import get_client_for_user
 from kairo.hero.observability_store import (
     classify_f1_run,
     log_classification,
@@ -87,6 +88,7 @@ def generate_today_board(
     trigger_source: str = "api",
     mode: str = "fixture_only",
     evidence_bundle=None,  # PERF: Pre-fetched bundle to avoid duplicate SourceActivation
+    user_id: UUID | None = None,  # Phase 2 BYOK
 ) -> TodayBoardDTO:
     """
     Generate the Today board for a brand.
@@ -113,11 +115,14 @@ def generate_today_board(
     CRITICAL (PR-1): This function runs LLM synthesis and MUST NOT be called
     from GET /today context. Use background jobs for generation.
 
+    Phase 2 BYOK: If user_id is provided, uses user's API keys for external services.
+
     Args:
         brand_id: UUID of the brand
         run_id: Optional run ID for correlation (auto-generated if None)
         trigger_source: Trigger source for observability
         mode: SourceActivation mode ("fixture_only" or "live_cap_limited")
+        user_id: Optional user UUID for BYOK token lookup
 
     Returns:
         TodayBoardDTO with opportunities
@@ -209,10 +214,13 @@ def generate_today_board(
                 "Using synthesis pipeline (USE_SYNTHESIS_PIPELINE=true)",
                 extra={"run_id": str(run_id), "brand_id": str(brand_id)},
             )
+            # Phase 2 BYOK: Get LLM client with user's API key if available
+            llm_client = get_client_for_user(user_id)
             drafts, pipeline_timings = run_synthesis_pipeline(
                 run_id=run_id,
                 brand_snapshot=snapshot,
                 evidence_items=evidence_bundle.items,
+                llm_client=llm_client,
             )
         else:
             # LEGACY: Use monolithic graph (fallback or when no evidence)

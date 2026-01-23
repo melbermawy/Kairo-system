@@ -250,6 +250,7 @@ def compile_brandbrain(
     prompt_version: str = "v1",
     model: str = "gpt-4",
     sync: bool = False,
+    user_id: UUID | None = None,
 ) -> CompileResult:
     """
     Kick off a BrandBrain compile.
@@ -332,7 +333,7 @@ def compile_brandbrain(
         # Synchronous execution for tests (SQLite in-memory doesn't share between threads)
         # Uses the new worker module with real ingestion
         from kairo.brandbrain.compile.worker import execute_compile_job
-        execute_compile_job(compile_run.id, force_refresh)
+        execute_compile_job(compile_run.id, force_refresh, user_id=user_id)
         compile_run.refresh_from_db()
         return CompileResult(
             compile_run_id=compile_run.id,

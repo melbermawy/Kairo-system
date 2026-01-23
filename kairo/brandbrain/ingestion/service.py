@@ -103,6 +103,7 @@ def ingest_source(
     poll_timeout_s: int = DEFAULT_POLL_TIMEOUT_S,
     poll_interval_s: int = DEFAULT_POLL_INTERVAL_S,
     apify_client: ApifyClient | None = None,
+    user_id: UUID | None = None,
 ) -> IngestionResult:
     """
     Ingest evidence from a source connection.
@@ -164,15 +165,30 @@ def ingest_source(
 
     # Step 4: Create/get Apify client
     if apify_client is None:
-        token = getattr(settings, "APIFY_TOKEN", None) or os.environ.get("APIFY_TOKEN")
-        if not token:
-            result.error = "APIFY_TOKEN not configured"
+        # BYOK only - no system .env token fallback
+        # User must configure their own Apify token in settings
+        if not user_id:
+            result.error = "No user context - cannot retrieve BYOK Apify token"
             logger.error(
                 "Ingestion failed for %s: %s",
                 source_connection.id,
                 result.error,
             )
             return result
+
+        from kairo.users.encryption import get_user_apify_token
+        token = get_user_apify_token(user_id)
+        if not token:
+            result.error = "User has no Apify token configured in settings"
+            logger.error(
+                "Ingestion failed for %s: %s (user_id=%s)",
+                source_connection.id,
+                result.error,
+                user_id,
+            )
+            return result
+
+        logger.info("Using BYOK Apify token for user %s", user_id)
         base_url = getattr(settings, "APIFY_BASE_URL", "https://api.apify.com")
         apify_client = ApifyClient(token=token, base_url=base_url)
 

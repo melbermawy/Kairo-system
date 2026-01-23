@@ -58,6 +58,8 @@ INSTALLED_APPS = [
     "kairo.integrations.apify.apps.ApifyConfig",
     # PR-1: BrandBrain data model
     "kairo.brandbrain.apps.BrandBrainConfig",
+    # Phase 1: User authentication
+    "kairo.users.apps.UsersConfig",
     # PRD-1: out of scope for PR-0 - future apps:
     # "kairo.engines.brand_brain",
     # "kairo.engines.opportunities",
@@ -75,6 +77,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "kairo.middleware.supabase_auth.SupabaseAuthMiddleware",  # Phase 1: Supabase JWT auth
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -391,3 +394,25 @@ else:
 
 # PR-7: TodayBoard cache TTL (default 6 hours per PRD §D.4)
 OPPORTUNITIES_CACHE_TTL_S = int(os.environ.get("OPPORTUNITIES_CACHE_TTL_S", "21600"))
+
+
+# =============================================================================
+# SUPABASE AUTHENTICATION (Phase 1)
+# =============================================================================
+# Supabase Auth is used for user authentication.
+# The backend validates JWTs issued by Supabase.
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "")
+
+# For local development, auth can be disabled
+AUTH_DISABLED = os.environ.get("AUTH_DISABLED", "false").lower() in ("true", "1", "yes")
+
+
+# =============================================================================
+# API KEY ENCRYPTION (Phase 2: BYOK)
+# =============================================================================
+# Fernet key for encrypting user API keys at rest.
+# Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY", "")

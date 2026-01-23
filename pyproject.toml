@@ -11,6 +11,12 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "django-cors-headers>=4.3.0",
     "markdown>=3.5.0",
+    # Phase 1: Authentication
+    "PyJWT>=2.8.0",
+    # Phase 2: BYOK encryption
+    "cryptography>=42.0.0",
+    # Deployment
+    "gunicorn>=21.0.0",
 ]
 
 [project.optional-dependencies]

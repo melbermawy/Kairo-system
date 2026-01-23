@@ -93,6 +93,8 @@ class Brand(TimestampedModel):
 
     Scoped to Tenant via FK. All child models (personas, pillars, etc.) are
     scoped via Brand, not directly by tenant_id.
+
+    Phase 1: Added owner field to link brands to users for access control.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -100,6 +102,16 @@ class Brand(TimestampedModel):
         Tenant,
         on_delete=models.PROTECT,
         related_name="brands",
+    )
+    # Phase 1: User who owns this brand (for access control)
+    # Using string reference to avoid circular import with kairo.users
+    owner = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        related_name="owned_brands",
+        null=True,
+        blank=True,
+        help_text="User who owns this brand",
     )
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=100)

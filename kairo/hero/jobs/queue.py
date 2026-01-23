@@ -90,6 +90,7 @@ def enqueue_opportunities_job(
     force: bool = False,
     first_run: bool = False,
     mode: str | None = None,
+    user_id: UUID | None = None,
 ) -> EnqueueResult:
     """
     Enqueue an opportunities generation job for background execution.
@@ -101,11 +102,15 @@ def enqueue_opportunities_job(
     - first_run=True (auto-enqueue): fixture_only (always)
     - Default: fixture_only
 
+    Phase 2 BYOK: If user_id is provided, stores it in job params for
+    BYOK token lookup during execution.
+
     Args:
         brand_id: UUID of the brand
         force: Whether this is a force regeneration (from POST /regenerate)
         first_run: Whether this is a first-run auto-enqueue (from GET with evidence)
         mode: Explicit mode override (if None, determined from force/first_run)
+        user_id: Optional user UUID for BYOK token lookup
 
     Returns:
         EnqueueResult with job_id and brand_id
@@ -129,6 +134,7 @@ def enqueue_opportunities_job(
             "force": force,
             "first_run": first_run,
             "mode": mode,  # PR-6: Store mode in job params
+            "user_id": str(user_id) if user_id else None,  # Phase 2 BYOK
         },
     )
 
@@ -607,3 +613,69 @@ def get_running_job_for_brand(brand_id: UUID) -> "OpportunitiesJob | None":
         .order_by("-created_at")
         .first()
     )
+
+
+def update_job_progress(
+    job_id: UUID,
+    stage: str,
+    detail: str | None = None,
+) -> bool:
+    """
+    Phase 3: Update job progress for UI indicators.
+
+    Allows the frontend to show step-by-step progress:
+    - "Fetching evidence from social platforms..."
+    - "Validating evidence quality..."
+    - "Generating opportunities with AI..."
+    - "Scoring and ranking opportunities..."
+
+    Args:
+        job_id: UUID of the job
+        stage: Progress stage (from ProgressStage constants)
+        detail: Optional human-readable detail (e.g., "Processing 45 items...")
+
+    Returns:
+        True if job was updated, False if not found.
+    """
+    from kairo.hero.models import OpportunitiesJob, OpportunitiesJobStatus
+
+    rows_updated = OpportunitiesJob.objects.filter(
+        id=job_id,
+        status=OpportunitiesJobStatus.RUNNING,
+    ).update(
+        progress_stage=stage,
+        progress_detail=detail,
+    )
+
+    if rows_updated > 0:
+        logger.debug(
+            "Updated progress for job %s: stage=%s, detail=%s",
+            job_id,
+            stage,
+            detail,
+        )
+        return True
+
+    return False
+
+
+def get_job_progress(job_id: UUID) -> dict | None:
+    """
+    Phase 3: Get job progress for frontend display.
+
+    Returns:
+        Dict with progress_stage and progress_detail, or None if job not found.
+    """
+    from kairo.hero.models import OpportunitiesJob
+
+    try:
+        job = OpportunitiesJob.objects.values(
+            "progress_stage", "progress_detail", "status"
+        ).get(id=job_id)
+        return {
+            "stage": job["progress_stage"],
+            "detail": job["progress_detail"],
+            "status": job["status"],
+        }
+    except OpportunitiesJob.DoesNotExist:
+        return None

@@ -39,6 +39,32 @@ class OpportunitiesJobStatus:
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
 
 
+class ProgressStage:
+    """
+    Phase 3: Progress stage constants for UI indicators.
+
+    Stages represent the current step in the generation pipeline,
+    allowing the frontend to show step-by-step progress to users.
+    """
+
+    PENDING = "pending"
+    FETCHING_EVIDENCE = "fetching_evidence"  # SourceActivation running
+    RUNNING_QUALITY_GATES = "running_quality_gates"  # Validating evidence
+    SYNTHESIZING = "synthesizing"  # LLM generating opportunities
+    SCORING = "scoring"  # Scoring and ranking opportunities
+    COMPLETE = "complete"  # All done
+
+    # Human-readable labels for the UI
+    LABELS = {
+        PENDING: "Waiting to start...",
+        FETCHING_EVIDENCE: "Fetching evidence from social platforms...",
+        RUNNING_QUALITY_GATES: "Validating evidence quality...",
+        SYNTHESIZING: "Generating opportunities with AI...",
+        SCORING: "Scoring and ranking opportunities...",
+        COMPLETE: "Generation complete!",
+    }
+
+
 class OpportunitiesJob(models.Model):
     """
     Durable job queue for opportunities generation.
@@ -108,6 +134,20 @@ class OpportunitiesJob(models.Model):
 
     # Result diagnostics (for debugging/observability)
     result_json = models.JSONField(default=dict)  # timing, evidence_stats, etc.
+
+    # Phase 3: Progress tracking for UI indicators
+    # Stages: pending -> fetching_evidence -> running_quality_gates -> synthesizing -> scoring -> complete
+    progress_stage = models.CharField(
+        max_length=50,
+        default="pending",
+        help_text="Current execution stage for progress indicators",
+    )
+    progress_detail = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Human-readable progress detail (e.g., 'Processing 45 evidence items...')",
+    )
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)

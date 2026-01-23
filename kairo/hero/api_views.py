@@ -169,6 +169,11 @@ def regenerate_today_board(request: HttpRequest, brand_id: str) -> JsonResponse:
     # PR1: Legacy kill switch - only allow in test mode
     allow_legacy = os.environ.get("ALLOW_LEGACY_SYNC_GENERATION", "").lower() in ("true", "1")
 
+    # Phase 2 BYOK: Get user_id from authenticated request
+    from kairo.middleware.supabase_auth import get_current_user
+    user = get_current_user(request)
+    user_id = user.id if user else None
+
     try:
         if use_legacy:
             if not allow_legacy:
@@ -197,8 +202,8 @@ def regenerate_today_board(request: HttpRequest, brand_id: str) -> JsonResponse:
             )
             return JsonResponse(dto.model_dump(mode="json"))
         else:
-            # New async pattern: enqueue job and return 202
-            dto = today_service.regenerate_today_board(brand_uuid)
+            # New async pattern: enqueue job and return 202 (pass user_id for BYOK)
+            dto = today_service.regenerate_today_board(brand_uuid, user_id=user_id)
             return JsonResponse(dto.model_dump(mode="json"), status=202)
     except Brand.DoesNotExist:
         return error_response(

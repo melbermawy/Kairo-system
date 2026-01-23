@@ -155,6 +155,7 @@ def _get_normalizer_for_actor(actor_id: str):
         "apify/instagram-scraper": _normalize_instagram_item,
         "apify/instagram-reel-scraper": _normalize_instagram_reel_item,
         "clockworks/tiktok-scraper": _normalize_tiktok_item,
+        "clockworks/tiktok-trends-scraper": _normalize_tiktok_trends_item,  # Phase 3
         "apimaestro/linkedin-company-posts": _normalize_linkedin_item,
         "streamers/youtube-scraper": _normalize_youtube_item,
     }
@@ -442,6 +443,91 @@ def _normalize_tiktok_item(
         fetched_at=fetched_at,
         has_transcript=has_transcript,
         raw_json=raw,
+    )
+
+
+def _normalize_tiktok_trends_item(
+    raw: dict[str, Any],
+    actor_id: str,
+    recipe_id: str,
+    stage: int,
+    fetched_at: datetime,
+) -> EvidenceItemData | None:
+    """
+    Normalize TikTok Trends Scraper output (Phase 3).
+
+    Expected fields from clockworks/tiktok-trends-scraper:
+    - hashtag: The trending hashtag name (without #)
+    - hashtagUrl: TikTok URL for the hashtag
+    - totalViews: Total views for content with this hashtag
+    - totalVideos: Number of videos with this hashtag
+    - trendingScore: Score indicating how trending (0-100)
+    - growthRate: Growth rate (e.g., "+42%")
+    - relatedHashtags: List of related hashtags
+    - industry: Industry category (if requested)
+    - region: Region code (e.g., "US")
+    - scrapedAt: Timestamp of scrape
+
+    NOTE: This is METADATA about trends, not actual content.
+    The raw_json is preserved for chaining to TT-1 where we extract hashtags.
+    """
+    hashtag = raw.get("hashtag")
+    if not hashtag:
+        return None
+
+    # Use hashtagUrl as canonical URL
+    url = raw.get("hashtagUrl") or f"https://www.tiktok.com/tag/{hashtag}"
+
+    # Parse scraped timestamp
+    scraped_at = None
+    scraped_at_str = raw.get("scrapedAt")
+    if scraped_at_str:
+        try:
+            scraped_at = datetime.fromisoformat(
+                scraped_at_str.replace("Z", "+00:00")
+            )
+        except (ValueError, TypeError):
+            pass
+
+    # Build description from metrics
+    total_views = raw.get("totalViews", 0)
+    trending_score = raw.get("trendingScore", 0)
+    growth_rate = raw.get("growthRate", "")
+    industry = raw.get("industry", "")
+
+    description = f"#{hashtag} - Trending score: {trending_score}, Views: {total_views:,}"
+    if growth_rate:
+        description += f", Growth: {growth_rate}"
+    if industry:
+        description += f", Industry: {industry}"
+
+    # Extract related hashtags
+    related = raw.get("relatedHashtags", [])
+    if isinstance(related, list):
+        hashtags = [h.lstrip("#") for h in related if isinstance(h, str)]
+    else:
+        hashtags = []
+
+    return EvidenceItemData(
+        platform="tiktok",
+        actor_id=actor_id,
+        acquisition_stage=stage,
+        recipe_id=recipe_id,
+        canonical_url=url,
+        external_id=hashtag,  # Use hashtag as ID
+        author_ref="tiktok_trends",  # Not a real author
+        title=f"Trending: #{hashtag}",
+        text_primary=description,
+        text_secondary="",  # No transcript for trends
+        hashtags=[hashtag] + hashtags[:5],  # Include main + related
+        view_count=total_views if isinstance(total_views, int) else None,
+        like_count=None,
+        comment_count=None,
+        share_count=None,
+        published_at=scraped_at,  # Use scrape time as publish time
+        fetched_at=fetched_at,
+        has_transcript=False,
+        raw_json=raw,  # CRITICAL: Preserve for TT-TRENDS → TT-1 chaining
     )
 
 

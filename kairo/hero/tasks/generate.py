@@ -57,6 +57,7 @@ def execute_opportunities_job(
     job_id: UUID,
     brand_id: UUID,
     mode: str | None = None,
+    user_id: UUID | None = None,
 ) -> JobResult:
     """
     Execute an opportunities generation job.
@@ -64,6 +65,7 @@ def execute_opportunities_job(
     PR1: Evidence gates + LLM synthesis.
     PR-6: Mode selection for fixture_only vs live_cap_limited.
     Patch B: SourceActivation runs FIRST, gates run against EvidenceBundle.
+    Phase 2 BYOK: If user_id is provided, uses user's API keys for external services.
 
     Pipeline:
     1. Run SourceActivation → EvidenceBundle (creates ActivationRun + EvidenceItem rows)
@@ -77,6 +79,7 @@ def execute_opportunities_job(
         job_id: UUID of the OpportunitiesJob
         brand_id: UUID of the brand
         mode: SourceActivation mode (if None, reads from job.params_json)
+        user_id: Optional user UUID for BYOK token lookup (if None, reads from job.params_json)
 
     Returns:
         JobResult with outcome details
@@ -98,13 +101,20 @@ def execute_opportunities_job(
     start_time = time.monotonic()
 
     # PR-6: Get mode from params or use default
-    if mode is None:
+    # Phase 2 BYOK: Also extract user_id from params
+    if mode is None or user_id is None:
         from kairo.hero.models import OpportunitiesJob
         try:
             job = OpportunitiesJob.objects.get(id=job_id)
-            mode = job.params_json.get("mode", "fixture_only") if job.params_json else "fixture_only"
+            job_params = job.params_json or {}
+            if mode is None:
+                mode = job_params.get("mode", "fixture_only")
+            if user_id is None:
+                user_id_str = job_params.get("user_id")
+                if user_id_str:
+                    user_id = UUID(user_id_str)
         except OpportunitiesJob.DoesNotExist:
-            mode = "fixture_only"
+            mode = mode or "fixture_only"
 
     diagnostics: dict = {
         "job_id": str(job_id),
@@ -114,6 +124,10 @@ def execute_opportunities_job(
     }
 
     try:
+        # Phase 3: Import progress tracking
+        from kairo.hero.jobs.queue import update_job_progress
+        from kairo.hero.models.opportunities_job import ProgressStage
+
         # Step 1: Run SourceActivation - creates ActivationRun + EvidenceItem rows
         # Per PRD: Evidence does NOT exist until SourceActivation creates it
         logger.info(
@@ -122,6 +136,14 @@ def execute_opportunities_job(
             job_id,
             mode,
         )
+
+        # Phase 3: Update progress - fetching evidence
+        update_job_progress(
+            job_id,
+            ProgressStage.FETCHING_EVIDENCE,
+            "Collecting content from social platforms...",
+        )
+
         activation_start = time.monotonic()
 
         seed_pack = derive_seed_pack(brand_id)
@@ -130,6 +152,7 @@ def execute_opportunities_job(
             seed_pack=seed_pack,
             job_id=job_id,
             mode=mode,
+            user_id=user_id,  # Phase 2 BYOK
         )
 
         activation_time_ms = int((time.monotonic() - activation_start) * 1000)
@@ -172,6 +195,14 @@ def execute_opportunities_job(
             brand_id,
             job_id,
         )
+
+        # Phase 3: Update progress - running quality gates
+        update_job_progress(
+            job_id,
+            ProgressStage.RUNNING_QUALITY_GATES,
+            f"Validating {len(evidence_bundle.items)} evidence items...",
+        )
+
         gate_start = time.monotonic()
 
         gate_items = _convert_bundle_to_gate_items(evidence_bundle)
@@ -257,6 +288,13 @@ def execute_opportunities_job(
             job_id,
         )
 
+        # Phase 3: Update progress - synthesizing opportunities
+        update_job_progress(
+            job_id,
+            ProgressStage.SYNTHESIZING,
+            "Generating opportunities with AI...",
+        )
+
         # Call the opportunities engine to run full synthesis
         # Engine handles: snapshot building, graph call, opportunity persistence, board creation
         # PR-6: Pass mode for SourceActivation execution
@@ -271,6 +309,7 @@ def execute_opportunities_job(
                 trigger_source="background_job",
                 mode=mode,  # PR-6: Pass mode to engine
                 evidence_bundle=evidence_bundle,  # PERF: Reuse existing bundle
+                user_id=user_id,  # Phase 2 BYOK
             )
             synthesis_time_ms = int((time.monotonic() - synthesis_start) * 1000)
 
@@ -306,6 +345,13 @@ def execute_opportunities_job(
 
             diagnostics["board_id"] = str(board.id)
             diagnostics["terminal_state"] = str(board.state)
+
+            # Phase 3: Update progress - complete
+            update_job_progress(
+                job_id,
+                ProgressStage.COMPLETE,
+                f"Generated {len(opportunity_ids)} opportunities!",
+            )
 
             # Mark job as succeeded
             complete_job(
