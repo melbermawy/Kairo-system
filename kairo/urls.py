@@ -12,6 +12,16 @@ from django.urls import include, path
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("kairo.hero.urls")),
+    # Phase 1: Authentication API
+    path(
+        "api/auth/",
+        include("kairo.users.urls"),
+    ),
+    # Phase 2: User settings API (BYOK)
+    path(
+        "api/user/",
+        include("kairo.users.user_urls"),
+    ),
     # PR-7: Core API endpoints (brands, onboarding, sources)
     path(
         "api/",

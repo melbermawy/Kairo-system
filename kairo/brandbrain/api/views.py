@@ -131,9 +131,20 @@ def compile_kickoff(request, brand_id: str) -> JsonResponse:
             }, status=422)
 
         # Kick off compile
+        # In development (DEBUG=True), use sync mode so it works without a worker process.
+        # In production, use async mode with the durable job queue.
+        use_sync = settings.DEBUG
+
+        # Get user_id for BYOK token lookup
+        from kairo.middleware.supabase_auth import get_current_user
+        user = get_current_user(request)
+        user_id = user.id if user else None
+
         result = compile_brandbrain(
             brand_id=parsed_brand_id,
             force_refresh=force_refresh,
+            sync=use_sync,
+            user_id=user_id,
         )
 
         # Handle result

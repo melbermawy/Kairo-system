@@ -102,6 +102,7 @@ def derive_seed_pack(
     instagram_queries = []
     instagram_hashtags = []
     query_plan_error = None
+    inferred_industry = None  # Phase 3: LLM-inferred industry for TikTok Trends
 
     # Call Query Planner if enabled and snapshot exists
     if use_query_planner and latest_snapshot:
@@ -131,11 +132,13 @@ def derive_seed_pack(
                 tiktok_hashtags = query_plan.get_tiktok_hashtags()
                 instagram_queries = query_plan.get_instagram_queries()
                 instagram_hashtags = query_plan.get_instagram_hashtags()
+                inferred_industry = query_plan.inferred_industry  # Phase 3
 
                 logger.info(
-                    "Query Planner succeeded: tiktok_queries=%s instagram_queries=%s",
+                    "Query Planner succeeded: tiktok_queries=%s instagram_queries=%s inferred_industry=%s",
                     tiktok_queries,
                     instagram_queries,
+                    inferred_industry,
                 )
 
         except Exception as e:
@@ -160,6 +163,7 @@ def derive_seed_pack(
         instagram_queries=instagram_queries,
         instagram_hashtags=instagram_hashtags,
         query_plan_error=query_plan_error,
+        inferred_industry=inferred_industry,  # Phase 3
     )
 
 
@@ -168,6 +172,7 @@ def get_or_create_evidence_bundle(
     seed_pack: SeedPack,
     job_id: UUID,
     mode: Literal["fixture_only", "live_cap_limited"] = "fixture_only",
+    user_id: UUID | None = None,
 ) -> EvidenceBundle:
     """
     Get or create evidence bundle for a brand.
@@ -180,6 +185,8 @@ def get_or_create_evidence_bundle(
     If Apify returns 0 items, we return empty bundle → insufficient_evidence.
     This ensures we get real feedback about evidence quality, not demo data.
 
+    Phase 2 BYOK: If user_id is provided, uses user's Apify token.
+
     This function:
     1. Loads fixture data (fixture_only) or executes Apify actors (live_cap_limited)
     2. Creates ActivationRun record
@@ -191,6 +198,7 @@ def get_or_create_evidence_bundle(
         seed_pack: SeedPack derived from snapshot
         job_id: OpportunitiesJob ID for linking
         mode: "fixture_only" or "live_cap_limited"
+        user_id: Optional user UUID for BYOK token lookup
 
     Returns:
         EvidenceBundle with evidence items
@@ -225,7 +233,7 @@ def get_or_create_evidence_bundle(
         # TASK-2: In live mode, fixtures are NEVER used as fallback
         # If Apify returns empty, we return empty bundle → gates fail → insufficient_evidence
         logger.info("FIXTURE_FALLBACK_USED=false (mode=live_cap_limited, fixtures disabled)")
-        return _create_live_bundle(brand_id, seed_pack, job_id, now)
+        return _create_live_bundle(brand_id, seed_pack, job_id, now, user_id=user_id)
     else:
         raise ValueError(f"Unknown mode: {mode}. Must be 'fixture_only' or 'live_cap_limited'.")
 
@@ -290,6 +298,7 @@ def _create_live_bundle(
     seed_pack: SeedPack,
     job_id: UUID,
     now: datetime,
+    user_id: UUID | None = None,
 ) -> EvidenceBundle:
     """
     Create evidence bundle via live Apify execution (PR-6 mode).
@@ -400,11 +409,12 @@ def _create_live_bundle(
             fetched_at=now,
         )
 
-    # Execute live activation
+    # Execute live activation (BYOK: pass user_id for token lookup)
     result = execute_live_activation(
         brand_id=brand_id,
         seed_pack=seed_pack,
         run_id=job_id,  # Use job_id as run_id for correlation
+        user_id=user_id,
     )
 
     if not result.success and not result.items:

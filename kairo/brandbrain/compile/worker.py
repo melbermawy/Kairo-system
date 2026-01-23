@@ -94,6 +94,7 @@ def _log_llm_config(context: str = "compile_execution") -> dict:
 def execute_compile_job(
     compile_run_id: UUID,
     force_refresh: bool = False,
+    user_id: UUID | None = None,
 ) -> None:
     """
     Execute the compile pipeline for a compile run.
@@ -227,8 +228,8 @@ def execute_compile_job(
             source_diag["freshness_action"] = action
 
             if freshness.should_refresh:
-                # Trigger real ingestion
-                result = ingest_source(source)
+                # Trigger real ingestion (with user's BYOK token if available)
+                result = ingest_source(source, user_id=user_id)
 
                 if result.success:
                     normalized_count = result.normalized_items_created + result.normalized_items_updated

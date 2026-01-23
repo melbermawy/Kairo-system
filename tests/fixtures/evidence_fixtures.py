@@ -117,20 +117,20 @@ def create_insufficient_evidence(brand_id: UUID) -> list[dict]:
     """
     Create evidence that FAILS basic quality gates.
 
-    This will fail the minimum items requirement (< 8).
+    Phase 3: MIN_EVIDENCE_ITEMS is now 2 (relaxed for BYOK users).
+    This creates only 1 item to fail the minimum requirement.
     """
     now = datetime.now(timezone.utc)
     items = []
 
-    # Only 3 items - insufficient
-    for i in range(3):
-        items.append(create_evidence_item(
-            brand_id,
-            platform="instagram",
-            author_ref=f"@creator_{i}",
-            text_primary=f"Short content {i}",
-            published_at=now - timedelta(days=i),
-        ))
+    # Only 1 item - insufficient (< 2)
+    items.append(create_evidence_item(
+        brand_id,
+        platform="instagram",
+        author_ref="@creator_0",
+        text_primary="Short content 0",
+        published_at=now,
+    ))
 
     return items
 

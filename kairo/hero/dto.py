@@ -568,6 +568,11 @@ class TodayBoardMetaDTO(BaseModel):
     state: TodayBoardState = TodayBoardState.NOT_GENERATED_YET
     job_id: str | None = None  # Present when state == "generating"
 
+    # Phase 3: Progress tracking for UI indicators
+    # Present when state == "generating" to show step-by-step progress
+    progress_stage: str | None = None  # e.g., "fetching_evidence", "synthesizing"
+    progress_detail: str | None = None  # e.g., "Processing 45 evidence items..."
+
     # PR1.1: Machine-parseable reason for ready state
     # REQUIRED when state=ready AND opportunities is empty
     ready_reason: str | None = None

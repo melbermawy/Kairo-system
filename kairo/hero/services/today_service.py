@@ -121,10 +121,14 @@ def get_today_board(brand_id: UUID) -> TodayBoardDTO:
     # ==========================================================================
     running_job_id = _get_running_job_id(brand_id)
     if running_job_id:
+        # Phase 3: Get progress info for UI indicators
+        progress_stage, progress_detail = _get_job_progress(running_job_id)
+
         logger.debug(
-            "GET /today returning generating state for brand %s (job=%s)",
+            "GET /today returning generating state for brand %s (job=%s, stage=%s)",
             brand_id,
             running_job_id,
+            progress_stage,
         )
         return TodayBoardDTO(
             brand_id=brand_id,
@@ -134,6 +138,8 @@ def get_today_board(brand_id: UUID) -> TodayBoardDTO:
                 generated_at=now,
                 state=TodayBoardState.GENERATING,
                 job_id=running_job_id,
+                progress_stage=progress_stage,
+                progress_detail=progress_detail,
                 cache_hit=False,
                 cache_key=cache_key,
             ),
@@ -205,7 +211,7 @@ def get_today_board(brand_id: UUID) -> TodayBoardDTO:
 # =============================================================================
 
 
-def regenerate_today_board(brand_id: UUID) -> RegenerateResponseDTO:
+def regenerate_today_board(brand_id: UUID, user_id: UUID | None = None) -> RegenerateResponseDTO:
     """
     POST /regenerate/ implementation.
 
@@ -217,8 +223,12 @@ def regenerate_today_board(brand_id: UUID) -> RegenerateResponseDTO:
     - Return 202 Accepted with job_id
     - Client polls GET /today/ for completion
 
+    Phase 2 BYOK: If user_id is provided, stores it in job params for
+    BYOK token lookup during execution.
+
     Args:
         brand_id: UUID of the brand
+        user_id: Optional user UUID for BYOK token lookup
 
     Returns:
         RegenerateResponseDTO with job_id and poll_url
@@ -238,8 +248,8 @@ def regenerate_today_board(brand_id: UUID) -> RegenerateResponseDTO:
         extra={"brand_id": str(brand_id), "cache_key": cache_key},
     )
 
-    # Enqueue background job (force=True to override any existing job)
-    job_id = _enqueue_generation_job(brand_id, force=True)
+    # Enqueue background job (force=True to override any existing job, pass user_id for BYOK)
+    job_id = _enqueue_generation_job(brand_id, force=True, user_id=user_id)
 
     return RegenerateResponseDTO(
         status="accepted",
@@ -344,6 +354,32 @@ def _get_running_job_id(brand_id: UUID) -> str | None:
     return None
 
 
+def _get_job_progress(job_id: str) -> tuple[str | None, str | None]:
+    """
+    Phase 3: Get job progress for UI indicators.
+
+    Args:
+        job_id: String UUID of the job
+
+    Returns:
+        Tuple of (progress_stage, progress_detail), both may be None
+    """
+    try:
+        from uuid import UUID
+        from kairo.hero.jobs.queue import get_job_progress
+
+        progress = get_job_progress(UUID(job_id))
+        if progress:
+            return progress.get("stage"), progress.get("detail")
+    except Exception as e:
+        logger.warning(
+            "Failed to get job progress",
+            extra={"job_id": job_id, "error": str(e)},
+        )
+
+    return None, None
+
+
 def _get_evidence_count(brand_id: UUID) -> int:
     """
     Get count of normalized evidence items for a brand.
@@ -381,20 +417,32 @@ def _has_brandbrain_snapshot(brand_id: UUID) -> bool:
         return False
 
 
-def _enqueue_generation_job(brand_id: UUID, force: bool = False, first_run: bool = False) -> str:
+def _enqueue_generation_job(
+    brand_id: UUID,
+    force: bool = False,
+    first_run: bool = False,
+    user_id: UUID | None = None,
+) -> str:
     """
     Enqueue a background generation job.
 
     PR1: Creates real OpportunitiesJob in database.
+    Phase 2 BYOK: Stores user_id in job params for BYOK token lookup.
+
+    DEBUG mode: Executes job synchronously (no worker required).
+    Production: Enqueues job for async worker execution.
 
     Args:
         brand_id: Brand to generate for
         force: If True, override any existing job
         first_run: If True, this is a first-run auto-enqueue
+        user_id: Optional user UUID for BYOK token lookup
 
     Returns:
         job_id for tracking
     """
+    from django.conf import settings
+
     # Check if job already running (idempotency)
     if not force:
         existing_job_id = _get_running_job_id(brand_id)
@@ -413,6 +461,7 @@ def _enqueue_generation_job(brand_id: UUID, force: bool = False, first_run: bool
             brand_id,
             force=force,
             first_run=first_run,
+            user_id=user_id,
         )
         job_id = str(result.job_id)
 
@@ -429,6 +478,17 @@ def _enqueue_generation_job(brand_id: UUID, force: bool = False, first_run: bool
             },
         )
 
+        # DEBUG mode: Execute job synchronously (no worker required)
+        # This allows development without running a separate worker process.
+        # Production uses async workers that claim and execute jobs.
+        if settings.DEBUG:
+            logger.info(
+                "DEBUG mode: Executing job synchronously (job=%s, brand=%s)",
+                job_id,
+                brand_id,
+            )
+            _execute_job_sync(result.job_id, brand_id, user_id=user_id)
+
         return job_id
 
     except Exception as e:
@@ -437,6 +497,61 @@ def _enqueue_generation_job(brand_id: UUID, force: bool = False, first_run: bool
             extra={"brand_id": str(brand_id), "error": str(e)},
         )
         raise
+
+
+def _execute_job_sync(job_id: UUID, brand_id: UUID, user_id: UUID | None = None) -> None:
+    """
+    Execute an opportunities job synchronously.
+
+    DEBUG mode helper: Runs the full generation pipeline inline,
+    bypassing the async worker queue. This allows development
+    without running a separate worker process.
+
+    Args:
+        job_id: UUID of the OpportunitiesJob
+        brand_id: UUID of the brand
+        user_id: Optional user UUID for BYOK token lookup
+    """
+    from kairo.hero.jobs.queue import claim_next_job
+    from kairo.hero.tasks.generate import execute_opportunities_job
+
+    # Claim the job (marks it as RUNNING)
+    claim_result = claim_next_job(worker_id="sync-debug-worker")
+
+    if not claim_result.claimed or claim_result.job is None:
+        logger.warning(
+            "Failed to claim job for sync execution (job=%s): %s",
+            job_id,
+            claim_result.reason,
+        )
+        return
+
+    # Execute the job
+    try:
+        result = execute_opportunities_job(
+            job_id=claim_result.job.id,
+            brand_id=brand_id,
+            user_id=user_id,
+        )
+
+        if result.success:
+            logger.info(
+                "Sync job execution succeeded (job=%s, board=%s)",
+                job_id,
+                result.board_id,
+            )
+        else:
+            logger.warning(
+                "Sync job execution failed (job=%s): %s",
+                job_id,
+                result.error or "insufficient_evidence" if result.insufficient_evidence else "unknown",
+            )
+    except Exception as e:
+        logger.exception(
+            "Sync job execution raised exception (job=%s): %s",
+            job_id,
+            str(e),
+        )
 
 
 # =============================================================================

@@ -483,14 +483,19 @@ class LLMClient:
         )
     """
 
-    def __init__(self, config: LLMConfig | None = None):
+    def __init__(self, config: LLMConfig | None = None, api_key_override: str | None = None):
         """
         Initialize the LLM client.
 
+        Phase 2 BYOK: Supports api_key_override for user-specific API keys.
+
         Args:
             config: Optional LLMConfig. If None, loads from environment.
+            api_key_override: Optional API key to use instead of config's key.
+                             Used for BYOK (Bring Your Own Key) feature.
         """
         self.config = config or load_config_from_env()
+        self._api_key_override = api_key_override
 
     def call(
         self,
@@ -707,15 +712,16 @@ class LLMClient:
                 "OpenAI package not installed. Install with: pip install openai"
             ) from e
 
-        # Check for API key
-        if not self.config.api_key:
+        # Phase 2 BYOK: Use override key if provided, otherwise config key
+        api_key = self._api_key_override or self.config.api_key
+        if not api_key:
             raise LLMCallError(
                 "OPENAI_API_KEY not set. Set the environment variable or use LLM_DISABLED=true for testing."
             )
 
-        # Create client
+        # Create client (BYOK: may use user's key)
         client = openai.OpenAI(
-            api_key=self.config.api_key,
+            api_key=api_key,
             timeout=timeout,
         )
 
@@ -963,3 +969,33 @@ def reset_default_client() -> None:
     """
     global _default_client
     _default_client = None
+
+
+def get_client_for_user(user_id: "UUID | None") -> LLMClient:
+    """
+    Get an LLM client configured for a specific user (BYOK support).
+
+    Phase 2 BYOK: If user has configured their own OpenAI API key,
+    creates a client using that key. Otherwise returns the default client.
+
+    Args:
+        user_id: User UUID, or None for default client
+
+    Returns:
+        LLMClient instance (may use user's key or system key)
+    """
+    if user_id is None:
+        return get_default_client()
+
+    # Try to get user's OpenAI key
+    try:
+        from kairo.users.encryption import get_user_openai_key
+        user_key = get_user_openai_key(user_id)
+        if user_key:
+            logger.info("Using user's BYOK OpenAI key for user_id=%s", user_id)
+            return LLMClient(api_key_override=user_key)
+    except Exception as e:
+        logger.warning("Failed to get user OpenAI key: %s", e)
+
+    # Fall back to default client
+    return get_default_client()
