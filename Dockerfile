@@ -22,11 +22,11 @@ COPY . .
 # Install Python dependencies (not editable mode for production)
 RUN pip install --no-cache-dir .
 
+# Make startup script executable
+RUN chmod +x scripts/start_production.sh
+
 # Expose port (Railway sets $PORT)
 EXPOSE 8000
 
-# Start script: migrate, collectstatic, then gunicorn
-# Railway provides $PORT environment variable
-CMD python manage.py migrate --noinput && \
-    python manage.py collectstatic --noinput && \
-    gunicorn kairo.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 2
+# Start with our production script (runs worker + gunicorn)
+CMD ["./scripts/start_production.sh"]
