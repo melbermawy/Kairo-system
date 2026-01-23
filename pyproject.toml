@@ -11,6 +11,9 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "django-cors-headers>=4.3.0",
     "markdown>=3.5.0",
+    "requests>=2.31.0",
+    "pydantic>=2.5.0",
+    "openai>=1.0.0",
     # Phase 1: Authentication
     "PyJWT>=2.8.0",
     # Phase 2: BYOK encryption
