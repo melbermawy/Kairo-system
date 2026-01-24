@@ -140,6 +140,40 @@ class ApifyClient:
         try:
             response = self._session.post(url, json=input_json, timeout=30)
             duration_ms = int(time.monotonic() * 1000 - call_start_ms)
+        except requests.exceptions.SSLError as e:
+            duration_ms = int(time.monotonic() * 1000 - call_start_ms)
+            logger.error(
+                "APIFY_CALL_END actor_id=%s status=SSL_ERROR duration_ms=%d error=%s",
+                actor_id,
+                duration_ms,
+                str(e),
+            )
+            raise ApifyError(
+                "SSL/TLS connection error to Apify. This may be a network issue or "
+                "firewall blocking HTTPS connections. Please check your network settings."
+            ) from e
+        except requests.exceptions.ConnectionError as e:
+            duration_ms = int(time.monotonic() * 1000 - call_start_ms)
+            logger.error(
+                "APIFY_CALL_END actor_id=%s status=CONNECTION_ERROR duration_ms=%d error=%s",
+                actor_id,
+                duration_ms,
+                str(e),
+            )
+            raise ApifyError(
+                "Could not connect to Apify API. Please check your network connection."
+            ) from e
+        except requests.exceptions.Timeout as e:
+            duration_ms = int(time.monotonic() * 1000 - call_start_ms)
+            logger.error(
+                "APIFY_CALL_END actor_id=%s status=TIMEOUT duration_ms=%d error=%s",
+                actor_id,
+                duration_ms,
+                str(e),
+            )
+            raise ApifyError(
+                "Connection to Apify API timed out. The service may be slow or overloaded."
+            ) from e
         except requests.RequestException as e:
             duration_ms = int(time.monotonic() * 1000 - call_start_ms)
             # TASK-2: Log APIFY_CALL_END with error
@@ -160,8 +194,28 @@ class ApifyClient:
                 response.status_code,
                 response.text[:200],
             )
+            # Provide more helpful error messages for common status codes
+            if response.status_code == 401:
+                error_msg = (
+                    "Apify authentication failed (401). Your Apify token may be invalid, "
+                    "expired, or you may have run out of credits. Please check your token "
+                    "in Settings or visit apify.com to verify your account status."
+                )
+            elif response.status_code == 403:
+                error_msg = (
+                    "Apify access denied (403). Your account may not have permission to run "
+                    "this actor, or your subscription tier may not support it."
+                )
+            elif response.status_code == 402:
+                error_msg = (
+                    "Apify payment required (402). Your Apify credits are exhausted. "
+                    "Please add credits at apify.com or update your subscription."
+                )
+            else:
+                error_msg = f"Failed to start actor run: HTTP {response.status_code}"
+
             raise ApifyError(
-                f"Failed to start actor run: {response.status_code}",
+                error_msg,
                 status_code=response.status_code,
                 body=response.text,
             )

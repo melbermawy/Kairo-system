@@ -88,27 +88,28 @@ class ActorCaps:
 
 
 # Actor caps per PRD G.1 table
-# Phase 3: Limits DOUBLED for more evidence collection
-# More evidence = better opportunities. Users with BYOK pay their own usage.
+# Phase 5: REDUCED limits to conserve Apify credits
+# Free tier users only have $5 - we need to be frugal and prioritize quality over quantity.
+# Fewer discovery items → ensures enrichment (transcripts) can complete within budget.
 ACTOR_CAPS = {
     "apify/instagram-scraper": ActorCaps(
         actor_id="apify/instagram-scraper",
         cap_field="resultsLimit",
-        our_limit=40,  # Phase 3: 2x from 20 to 40
+        our_limit=15,  # Phase 5: Reduced from 40 to 15 (discovery)
         actor_max=200,
         estimated_cost_per_result=Decimal("0.002"),
     ),
     "apify/instagram-reel-scraper": ActorCaps(
         actor_id="apify/instagram-reel-scraper",
         cap_field="resultsLimit",
-        our_limit=10,  # Phase 3: 2x from 5 to 10
+        our_limit=8,  # Phase 5: Reduced from 10 to 8 (enrichment - this is critical for transcripts)
         actor_max=200,
         estimated_cost_per_result=Decimal("0.008"),
     ),
     "clockworks/tiktok-scraper": ActorCaps(
         actor_id="clockworks/tiktok-scraper",
         cap_field="resultsPerPage",
-        our_limit=30,  # Phase 3: 2x from 15 to 30
+        our_limit=15,  # Phase 5: Reduced from 30 to 15
         actor_max=1_000_000,
         estimated_cost_per_result=Decimal("0.003"),
     ),
@@ -116,21 +117,21 @@ ACTOR_CAPS = {
     "clockworks/tiktok-trends-scraper": ActorCaps(
         actor_id="clockworks/tiktok-trends-scraper",
         cap_field="maxResults",
-        our_limit=30,  # 30 trending hashtags per run
+        our_limit=10,  # Phase 5: Reduced from 30 to 10
         actor_max=100,
         estimated_cost_per_result=Decimal("0.002"),
     ),
     "apimaestro/linkedin-company-posts": ActorCaps(
         actor_id="apimaestro/linkedin-company-posts",
         cap_field="limit",
-        our_limit=40,  # Phase 3: 2x from 20 to 40
+        our_limit=15,  # Phase 5: Reduced from 40 to 15
         actor_max=100,
         estimated_cost_per_result=Decimal("0.002"),
     ),
     "streamers/youtube-scraper": ActorCaps(
         actor_id="streamers/youtube-scraper",
         cap_field="maxResults",
-        our_limit=20,  # Phase 3: 2x from 10 to 20
+        our_limit=10,  # Phase 5: Reduced from 20 to 10
         actor_max=999_999,
         estimated_cost_per_result=Decimal("0.003"),
     ),

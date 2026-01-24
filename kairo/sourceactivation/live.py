@@ -117,7 +117,13 @@ def get_apify_client(user_id: UUID | None = None) -> ApifyClient:
     if not token:
         raise ValueError(f"User has no Apify token configured in settings (user_id={user_id})")
 
-    logger.info("Using user's BYOK Apify token for user_id=%s", user_id)
+    # Log token metadata for debugging (NOT the actual token)
+    token_last4 = token[-4:] if len(token) >= 4 else "***"
+    token_len = len(token)
+    logger.info(
+        "Using user's BYOK Apify token: user_id=%s, token_len=%d, last4=%s",
+        user_id, token_len, token_last4
+    )
     base_url = getattr(settings, "APIFY_BASE_URL", "https://api.apify.com")
 
     return ApifyClient(token=token, base_url=base_url)

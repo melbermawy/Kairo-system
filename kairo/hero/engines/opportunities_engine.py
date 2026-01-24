@@ -836,7 +836,7 @@ def _persist_opportunities(
                     "run_id": str(run_id),
                     "opp_id": str(opp_id),
                     "title": draft.proposed_title[:50],
-                    "created": created,
+                    "was_created": created,  # renamed from 'created' - reserved LogRecord attr
                     "why_now_len": len(why_now),
                     "evidence_ids_count": len(evidence_ids_str),
                 },
@@ -994,7 +994,7 @@ def _generate_stub_opportunities(brand: Brand, run_id: UUID) -> list[Opportunity
                     "run_id": str(run_id),
                     "opp_id": str(opp_id),
                     "title": template["title"][:50],
-                    "created": created,
+                    "was_created": created,  # renamed from 'created' - reserved LogRecord attr
                 },
             )
 
