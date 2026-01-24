@@ -95,6 +95,7 @@ def execute_opportunities_job(
         MIN_EVIDENCE_ITEMS,
         MIN_TRANSCRIPT_COVERAGE,
         REQUIRED_PLATFORMS,
+        get_actionable_remediation,
     )
     from kairo.sourceactivation.services import derive_seed_pack, get_or_create_evidence_bundle
 
@@ -246,6 +247,11 @@ def execute_opportunities_job(
                 "failures": shortfall_data.get("failures", []) + validation_result.diagnostics.get("failures", []),
             }
 
+            # Generate actionable remediation message based on specific failures
+            failures = evidence_shortfall.get("failures", [])
+            summary = diagnostics.get("evidence_summary", {})
+            actionable_remediation = get_actionable_remediation(failures, summary)
+
             # Create board with insufficient_evidence state
             board = OpportunitiesBoard.objects.create(
                 brand_id=brand_id,
@@ -253,7 +259,7 @@ def execute_opportunities_job(
                 opportunity_ids=[],
                 evidence_summary_json=diagnostics.get("evidence_summary", {}),
                 evidence_shortfall_json=evidence_shortfall,
-                remediation="Connect Instagram or TikTok sources in Settings, then run BrandBrain compile.",
+                remediation=actionable_remediation,
                 diagnostics_json=diagnostics,
             )
 
@@ -389,6 +395,19 @@ def execute_opportunities_job(
                 str(synthesis_error),
             )
 
+            # Generate specific error remediation based on the error type
+            error_str = str(synthesis_error).lower()
+            if "apify" in error_str and ("401" in error_str or "authentication" in error_str):
+                error_remediation = "Apify authentication failed. Check your Apify token in Settings."
+            elif "apify" in error_str and ("402" in error_str or "credit" in error_str or "payment" in error_str):
+                error_remediation = "Apify credits exhausted. Add credits at apify.com and try again."
+            elif "openai" in error_str or "rate limit" in error_str:
+                error_remediation = "AI service rate limited. Wait a few minutes and try regenerating."
+            elif "timeout" in error_str:
+                error_remediation = "Request timed out. The service may be slow. Try regenerating."
+            else:
+                error_remediation = "Synthesis failed due to a temporary error. Try regenerating."
+
             # Create ERROR board (gates passed, synthesis failed)
             board = OpportunitiesBoard.objects.create(
                 brand_id=brand_id,
@@ -396,7 +415,7 @@ def execute_opportunities_job(
                 opportunity_ids=[],
                 evidence_summary_json=diagnostics.get("evidence_summary", {}),
                 # evidence_shortfall_json defaults to {} - DTO converts empty to None
-                remediation="Synthesis failed due to a temporary error. Try regenerating.",
+                remediation=error_remediation,
                 diagnostics_json=diagnostics,
             )
 

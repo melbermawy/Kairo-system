@@ -505,3 +505,76 @@ def validate_evidence_for_synthesis(
             "usability_stats": usability_result.stats,
         },
     )
+
+
+# =============================================================================
+# ACTIONABLE REMEDIATION MESSAGES (Phase 5)
+# =============================================================================
+
+
+def get_actionable_remediation(failures: list[str], summary: dict | None = None) -> str:
+    """
+    Generate user-friendly, actionable remediation message based on failure types.
+
+    Returns a specific message that tells users exactly what they need to do,
+    rather than a generic "connect sources" message.
+    """
+    if not failures:
+        return "Evidence validation passed."
+
+    # Categorize failures by type
+    has_no_items = any("insufficient_items" in f or "no_evidence" in f for f in failures)
+    has_no_text = any("insufficient_text_items" in f or "insufficient_content" in f for f in failures)
+    has_stale = any("stale_evidence" in f for f in failures)
+    has_missing_platform = any("missing_required_platforms" in f for f in failures)
+    has_transcript = any("transcript" in f.lower() for f in failures)
+
+    # Build actionable message based on priority
+    messages = []
+
+    if has_no_items:
+        messages.append(
+            "We couldn't find enough content from your connected sources. "
+            "Make sure your Instagram or TikTok handles are correct and have recent posts."
+        )
+    elif has_stale:
+        messages.append(
+            "The content we found is older than 30 days. "
+            "Your sources need more recent posts for timely opportunity generation."
+        )
+    elif has_no_text:
+        messages.append(
+            "We found content but couldn't extract enough text or captions. "
+            "This usually means the scrapers hit a rate limit or the content is video-only without captions."
+        )
+    elif has_transcript:
+        messages.append(
+            "We need more video transcripts for quality opportunities. "
+            "This may happen if Apify credits ran out during enrichment. Check your Apify dashboard."
+        )
+    elif has_missing_platform:
+        messages.append(
+            "Connect Instagram or TikTok in your brand settings to enable opportunity generation."
+        )
+    else:
+        # Fallback for other failures
+        messages.append(
+            "Evidence quality checks failed. Try running BrandBrain compile again or check your source configuration."
+        )
+
+    # Add specific numbers if available
+    if summary:
+        items = summary.get("total_items", 0)
+        text_items = summary.get("items_with_text", 0)
+        platforms = summary.get("platforms", [])
+
+        if items > 0:
+            detail = f" (Found {items} items"
+            if text_items < items:
+                detail += f", only {text_items} with text"
+            if platforms:
+                detail += f" from {', '.join(platforms)}"
+            detail += ")"
+            messages.append(detail)
+
+    return " ".join(messages)
